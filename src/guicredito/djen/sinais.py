@@ -33,6 +33,7 @@ PADROES: list[re.Pattern[str]] = [
     ),
     re.compile(r"quando representado pela defensoria publica ou nao tiver procurador"),
     re.compile(r"registro geral de indicacao da defensoria"),
+    re.compile(r"cumprimento de sentenca relativo a acordo homologado"),
 ]
 
 CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
@@ -65,7 +66,10 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
         Bloco.ACORDO,
         0,
         "acordo homologado neste processo",
-        re.compile(r"homolog\w*.{0,40}acordo|acordo.{0,40}homologad|acordo celebrado entre as partes"),
+        re.compile(
+            r"homologo\w*,?(?: por sentenca,?)? (?:o |os )?(?:presente )?acordo"
+            r"|homologad[oa] o acordo|acordo (?:ja )?homologado"
+        ),
     ),
     (
         "transito_em_julgado",
@@ -73,8 +77,8 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
         15,
         "trânsito em julgado",
         re.compile(
-            r"transitou em julgado|transitad[oa] em julgado"
-            r"|certific\w*.{0,40}transito em julgado|ocorreu o transito em julgado"
+            r"transitou em julgado|(?:acordao|sentenca|decisao) transitad[oa] em julgado"
+            r"|certifico(?: que)? o transito em julgado|ocorreu o transito em julgado"
         ),
     ),
     (

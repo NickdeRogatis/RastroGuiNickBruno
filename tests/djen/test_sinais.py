@@ -202,6 +202,20 @@ DETECTAR = [
         "acordo homologado neste processo",
         "Fica homologado o acordo de fls. 120.",
     ),
+    (
+        "acordo_homologado",
+        AC,
+        0,
+        "acordo homologado neste processo",
+        "Homologo por sentença o acordo do evento 12 para que produza seus efeitos.",
+    ),
+    (
+        "acordo_homologado",
+        AC,
+        0,
+        "acordo homologado neste processo",
+        "Cumprido que restou o acordo homologado, julgo extinto o processo.",
+    ),
     ("transito_em_julgado", T, 15, "trânsito em julgado", "A sentença transitou em julgado em 2019."),
     (
         "transito_em_julgado",
@@ -211,6 +225,15 @@ DETECTAR = [
         "Certifico que ocorreu o trânsito em julgado da sentença.",
     ),
     ("transito_em_julgado", T, 15, "trânsito em julgado", "Decisão transitada em julgado."),
+    ("transito_em_julgado", T, 15, "trânsito em julgado", "Acórdão transitado em julgado."),
+    (
+        "transito_em_julgado",
+        T,
+        15,
+        "trânsito em julgado",
+        "Certifico que a sentença de fls. 80 transitou em julgado.",
+    ),
+    ("transito_em_julgado", T, 15, "trânsito em julgado", "Certifico o trânsito em julgado da sentença."),
 ]
 
 NAO_DETECTAR = [
@@ -226,6 +249,35 @@ NAO_DETECTAR = [
     ("sem_bens", "Suspendo o processo por 30 dias."),
     ("gratuidade_devedor", "Indefiro ao executado os benefícios da justiça gratuita."),
     ("acordo_homologado", "Não houve acordo entre as partes."),
+    (
+        "acordo_homologado",
+        'Exemplos: "contestação", "réplica", "pedido de homologação de acordo", "impugnação ao cumprimento de sentença".',
+    ),
+    (
+        "acordo_homologado",
+        "As petições não devem ser protocoladas como petição intermediária, e sim de acordo com a "
+        "classificação específica, sob pena de não homologação.",
+    ),
+    (
+        "acordo_homologado",
+        "Após, se não houve prévio reconhecimento do débito (como no caso de requerimento de parcelamento "
+        "ou de homologação de acordo), intime-se.",
+    ),
+    ("acordo_homologado", "Homologação de acordo."),
+    (
+        "acordo_homologado",
+        "Trata-se de providência inaplicável em ação de execução de título extrajudicial e em cumprimento "
+        "de sentença relativo a acordo homologado por sentença.",
+    ),
+    (
+        "transito_em_julgado",
+        "Por fim, certificado o trânsito em julgado da decisão e transcorrido o prazo do art. 523, a parte "
+        "exequente poderá requerer a certidão.",
+    ),
+    ("transito_em_julgado", "Certificado o trânsito em julgado, arquivem-se os autos."),
+    ("transito_em_julgado", "Transitada em julgado, arquivem-se."),
+    ("transito_em_julgado", "Ficam sustados eventuais leilões e, transitada em julgado esta sentença, levantem-se."),
+    ("acordo_homologado", "Acordo celebrado entre as partes, pendente de homologação."),
     ("acordo_homologado", "Designo audiência de conciliação."),
     ("transito_em_julgado", "Após o trânsito em julgado, arquivem-se os autos."),
     ("transito_em_julgado", "Aguarde-se o trânsito em julgado."),
