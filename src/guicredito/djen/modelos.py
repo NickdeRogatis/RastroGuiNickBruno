@@ -26,13 +26,20 @@ class TipoCredor(StrEnum):
 
 
 class Bloco(StrEnum):
-    ACORDO = "acordo"
-    IMOVEL = "imovel"
-    TRANSITO = "transito"
-    DESGASTE = "desgaste"
-    VEICULO = "veiculo"
-    DESCONTO = "desconto"
-    ALERTA = "alerta"
+    """Which part of the score a ``Sinal`` counts toward.
+
+    ``sinais.CATALOGO`` gives every signal one block. ``pontuacao`` adds up
+    the points of each block separately, up to that block's cap, and
+    ``planilha`` uses the block to choose the column the label goes in.
+    """
+
+    ACORDO = "acordo"  # settled in another case (max 30)
+    IMOVEL = "imovel"  # real estate: seized, appraised, auction (max 25)
+    TRANSITO = "transito"  # final judgment (max 15)
+    DESGASTE = "desgaste"  # wear: failed bank block, failed settlement, archived (max 15)
+    VEICULO = "veiculo"  # car (max 3)
+    DESCONTO = "desconto"  # negative points, no cap (no assets, Defensoria...)
+    ALERTA = "alerta"  # 0 points, shown only as a warning
 
 
 @dataclass(frozen=True)
