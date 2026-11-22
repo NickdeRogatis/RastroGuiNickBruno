@@ -11,12 +11,19 @@ the highest-precedence name (fund, then bank, then company, then person).
 ``so_empresa`` is true when every debtor is a company. ``pipeline`` drops
 those before ``pontuacao`` sees them. ``comarca`` shortens the court name
 for the Comarca column that ``planilha`` writes.
+
+``marcar_acordos`` runs after ``montar_casos``. A debtor with an approved
+settlement (``acordo_homologado``) in one process earns 30 points on each
+of their *other* processes. Names match after ``normalizar`` and only
+with three words or more, so short homonyms do not match.
 """
 
 import re
 from collections.abc import Iterable
+from dataclasses import replace
 
 from guicredito.djen.modelos import (
+    Bloco,
     Caso,
     Parte,
     Publicacao,
@@ -26,7 +33,7 @@ from guicredito.djen.modelos import (
 )
 from guicredito.djen.partes import eh_empresa, partes_do_cabecalho, tipo_credor
 from guicredito.djen.sinais import detectar_sinais
-from guicredito.djen.texto import ano_cnj, normalizar
+from guicredito.djen.texto import ano_cnj, formatar_cnj, normalizar
 
 _COMARCA = re.compile(r"comarca de\s+(.+)", re.IGNORECASE)
 _MARCADOR = re.compile(
@@ -35,6 +42,7 @@ _MARCADOR = re.compile(
     re.IGNORECASE,
 )
 _CNJ_TJSP = re.compile(r"\d{7}-\d{2}\.(\d{4})\.8\.26\.\d{4}")
+_PALAVRAS_MINIMAS = 3
 _PRECEDENCIA = (
     TipoCredor.FUNDO,
     TipoCredor.BANCO,
@@ -183,3 +191,39 @@ def montar_casos(resumos: Iterable[ResumoPublicacao]) -> list[Caso]:
             )
         )
     return casos
+
+
+def _nomes_para_cruzar(caso: Caso) -> list[str]:
+    if caso.devedor is None:
+        return []
+    nomes = [normalizar(nome) for nome in caso.devedor.split("; ")]
+    return [nome for nome in nomes if len(nome.split()) >= _PALAVRAS_MINIMAS]
+
+
+def marcar_acordos(casos: list[Caso], referencia: Iterable[Caso]) -> list[Caso]:
+    acordos: dict[str, set[str]] = {}
+    for caso in referencia:
+        if not any(sinal.chave == "acordo_homologado" for sinal in caso.sinais):
+            continue
+        for nome in _nomes_para_cruzar(caso):
+            acordos.setdefault(nome, set()).add(caso.numero_processo)
+    marcados: list[Caso] = []
+    for caso in casos:
+        outros = {
+            numero
+            for nome in _nomes_para_cruzar(caso)
+            for numero in acordos.get(nome, set())
+            if numero != caso.numero_processo
+        }
+        if not outros:
+            marcados.append(caso)
+            continue
+        sinal = Sinal(
+            "acordo_outro_processo",
+            Bloco.ACORDO,
+            30,
+            "acordo em outro processo",
+            f"Acordo homologado no processo {formatar_cnj(min(outros))}",
+        )
+        marcados.append(replace(caso, sinais=caso.sinais + (sinal,)))
+    return marcados

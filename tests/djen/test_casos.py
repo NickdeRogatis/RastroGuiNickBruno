@@ -2,8 +2,16 @@ from datetime import date
 
 import pytest
 
-from guicredito.djen.casos import anos_citados, comarca, montar_casos, resumir
-from guicredito.djen.modelos import Destinatario, Parte, Publicacao, ResumoPublicacao, TipoCredor
+from guicredito.djen.casos import anos_citados, comarca, marcar_acordos, montar_casos, resumir
+from guicredito.djen.modelos import (
+    Bloco,
+    Destinatario,
+    Parte,
+    Publicacao,
+    ResumoPublicacao,
+    Sinal,
+    TipoCredor,
+)
 
 NUMERO_2022 = "10034641820228260269"
 NUMERO_2015 = "10308309820158260100"
@@ -133,3 +141,70 @@ def test_resumir_junta_destinatarios_e_cabecalho():
     obtido = resumir(pub)
     assert obtido.credores == ("BANCO EXEMPLO S.A.",)
     assert obtido.devedores == (Parte("JOÃO EXEMPLO", False),)
+
+
+PROC_ACORDO = "10000011820238260001"
+PROC_OUTRO = "10000021820228260002"
+ACORDO = Sinal("acordo_homologado", Bloco.ACORDO, 0, "acordo homologado neste processo", "Homologo o acordo.")
+
+
+def caso_de(numero: str, devedor: str | None, *sinais: Sinal):
+    nomes = devedor.split("; ") if devedor else []
+    (caso,) = montar_casos(
+        [
+            resumo(
+                numero_processo=numero,
+                devedores=tuple(Parte(nome, False) for nome in nomes),
+                sinais=sinais,
+            )
+        ]
+    )
+    return caso
+
+
+def _acordos(caso) -> list[Sinal]:
+    return [s for s in caso.sinais if s.chave == "acordo_outro_processo"]
+
+
+def test_acordo_em_a_pontua_b_e_nao_a():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    b = caso_de(PROC_OUTRO, "JOSÉ CARLOS DA SILVA")
+    marcado_a, marcado_b = marcar_acordos([a, b], [a, b])
+    assert _acordos(marcado_a) == []
+    (sinal,) = _acordos(marcado_b)
+    assert (sinal.bloco, sinal.pontos, sinal.rotulo) == (Bloco.ACORDO, 30, "acordo em outro processo")
+    assert sinal.trecho == "Acordo homologado no processo 1000001-18.2023.8.26.0001"
+
+
+def test_nome_com_acento_e_espaco_diferentes_casa():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    b = caso_de(PROC_OUTRO, "Jose Carlos da  Silva")
+    (marcado_b,) = marcar_acordos([b], [a, b])
+    assert len(_acordos(marcado_b)) == 1
+
+
+def test_nome_de_duas_palavras_nao_casa():
+    a = caso_de(PROC_ACORDO, "JOSÉ SILVA", ACORDO)
+    b = caso_de(PROC_OUTRO, "JOSÉ SILVA")
+    (marcado_b,) = marcar_acordos([b], [a, b])
+    assert _acordos(marcado_b) == []
+
+
+def test_segundo_devedor_conta():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    b = caso_de(PROC_OUTRO, "MARIA EXEMPLO FICTÍCIA; JOSÉ CARLOS DA SILVA")
+    (marcado_b,) = marcar_acordos([b], [a, b])
+    assert len(_acordos(marcado_b)) == 1
+
+
+def test_mesmo_numero_no_historico_nao_conta():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA")
+    a_historico = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    (marcado,) = marcar_acordos([a], [a, a_historico])
+    assert _acordos(marcado) == []
+
+
+def test_devedor_none_nao_quebra():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    sem = caso_de(PROC_OUTRO, None)
+    assert marcar_acordos([sem], [a, sem]) == [sem]
