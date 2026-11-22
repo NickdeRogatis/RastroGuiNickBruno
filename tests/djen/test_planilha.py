@@ -28,7 +28,7 @@ CABECALHO = [
     "Devedor",
     "Sinais de desgaste",
     "Sinais de patrimônio",
-    "Sinais de vulnerabilidade",
+    "Alertas",
     "Última publicação",
     "Publicações no período",
     "Trecho principal",
@@ -59,7 +59,7 @@ def caso(**kw) -> Caso:
 
 def pontuado(total: int, **kw) -> CasoPontuado:
     base = caso(**kw)
-    return CasoPontuado(base, Pontuacao(0, 0, 0, 0, 0, 0, total))
+    return CasoPontuado(base, Pontuacao(0, 0, 0, 0, 0, 0, 0, total))
 
 
 def rodada(**kw) -> ResumoRodada:
@@ -72,6 +72,9 @@ def rodada(**kw) -> ResumoRodada:
         publicacoes_cobranca=0,
         processos=0,
         processos_so_empresa=0,
+        processos_banco=0,
+        processos_recentes=0,
+        dias_historico=0,
         casos_na_planilha=0,
         gerado_em=datetime(2026, 11, 8, 21, 30),
     )
@@ -98,9 +101,11 @@ def test_linha_do_caso(tmp_path):
         avalista=True,
         sinais=(
             Sinal("bloqueio_negativo", Bloco.DESGASTE, 10, "bloqueio infrutífero", "pesquisa"),
-            Sinal("imovel_penhorado", Bloco.PATRIMONIO, 15, "imóvel penhorado/avaliado", trecho),
+            Sinal("imovel_penhorado", Bloco.IMOVEL, 15, "imóvel penhorado/avaliado", trecho),
             Sinal("sem_bens", Bloco.DESCONTO, -10, "⚠ sem bens localizados", "sem bens"),
             Sinal("devedor_nao_localizado", Bloco.ALERTA, 0, "⚠ devedor não localizado", "carta"),
+            Sinal("acordo_outro_processo", Bloco.ACORDO, 30, "acordo em outro processo", "Acordo homologado"),
+            Sinal("veiculo", Bloco.VEICULO, 3, "veículo", "renajud"),
         ),
     )
     wb = gravar(tmp_path, [item])
@@ -111,9 +116,11 @@ def test_linha_do_caso(tmp_path):
     assert linha[2] == "1003464-18.2022.8.26.0269"
     assert wb["Casos"]["C2"].hyperlink.target == LINK
     assert linha[8] == "JOÃO EXEMPLO [avalista/sócio]"
-    assert linha[9] == "bloqueio infrutífero; ⚠ sem bens localizados; ⚠ devedor não localizado"
+    assert linha[9] == "bloqueio infrutífero"
+    assert linha[10] == "acordo em outro processo; imóvel penhorado/avaliado; veículo"
+    assert linha[11] == "⚠ sem bens localizados; ⚠ devedor não localizado"
     assert linha[12] == "06/11 · Intimação"
-    assert linha[14] == f'"{trecho}"'
+    assert linha[14] == '"Acordo homologado"'
 
 
 def test_devedor_nao_identificado_e_fundo(tmp_path):
@@ -166,6 +173,9 @@ def test_como_ler_tem_periodo_e_funil(tmp_path):
         publicacoes_cobranca=222222,
         processos=333333,
         processos_so_empresa=444444,
+        processos_banco=666666,
+        processos_recentes=777777,
+        dias_historico=888888,
         casos_na_planilha=555555,
     )
     wb = gravar(tmp_path, [], resumo=resumo)
@@ -176,5 +186,18 @@ def test_como_ler_tem_periodo_e_funil(tmp_path):
         if valor is not None
     )
     assert "03/11/2026 a 07/11/2026" in texto
-    for numero in (111111, 222222, 333333, 444444, 555555):
+    for numero in (111111, 222222, 333333, 444444, 555555, 666666, 777777, 888888):
         assert str(numero) in texto
+    assert "Fora por credor banco" in texto
+    assert "Credor (máx. 5): Empresa, Pessoa ou Fundo 5. Credor banco fica fora da planilha." in texto
+    assert "Vulnerabilidade" not in texto
+
+
+def test_desconto_de_defensoria_vai_para_alertas(tmp_path):
+    item = pontuado(
+        10,
+        sinais=(Sinal("defensoria", Bloco.DESCONTO, -5, "⚠ Defensoria Pública", "Defensoria"),),
+    )
+    linha = [c.value for c in gravar(tmp_path, [item])["Casos"][2]]
+    assert linha[11] == "⚠ Defensoria Pública"
+    assert linha[9] is None

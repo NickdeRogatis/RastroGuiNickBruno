@@ -3,8 +3,9 @@
 ``escrever_planilha`` creates ``saida/casos_djen_{inicio}_a_{fim}.xlsx``.
 Casos is one row per ``CasoPontuado`` from ``pontuacao``, in that order.
 The Processo cell uses ``texto.formatar_cnj`` and links to the newest act.
-Signal columns print the labels from ``sinais``. Green is 75 points or
-more. Yellow is 50 to 74.
+Signal columns print the labels from ``sinais``: wear, then assets
+(settlement in another case, real estate, final judgment, vehicle), then
+discounts and alerts. Green is 75 points or more. Yellow is 50 to 74.
 
 Publicações is the full text of those same cases, from the second zip
 read in ``pipeline``. ``texto.limpar_para_excel`` strips characters Excel
@@ -49,7 +50,7 @@ _COLUNAS = (
     "Devedor",
     "Sinais de desgaste",
     "Sinais de patrimônio",
-    "Sinais de vulnerabilidade",
+    "Alertas",
     "Última publicação",
     "Publicações no período",
     "Trecho principal",
@@ -62,23 +63,25 @@ _EXPLICACAO = (
     "Comarca tirada do órgão. Foro Central e Regionais contam como São Paulo.",
     "Classe processual da publicação mais recente.",
     "Credor de maior precedência: fundo, depois banco, empresa e pessoa.",
-    "Banco, Fundo ⚑, Pessoa ou Empresa. Vazio se não houver credor.",
+    "Fundo ⚑, Pessoa ou Empresa. Vazio se não houver credor. Bancos ficam fora.",
     'Pessoa física. "não identificado" se não houver. "[avalista/sócio]" quando o polo passivo também tem empresa.',
-    "Rótulos de desgaste, depois descontos e alertas.",
-    "Rótulos dos sinais de patrimônio.",
-    "Rótulos dos sinais de vulnerabilidade.",
+    "Rótulos dos sinais de desgaste.",
+    "Acordo em outro processo, imóvel, trânsito em julgado e veículo.",
+    "Descontos e alertas (⚠).",
     "Data e tipo da publicação mais recente no período.",
     "Quantas publicações desse processo entraram no período.",
     "Frase do sinal positivo de maior pontuação, entre aspas.",
 )
 _PONTOS = (
-    "Credor (máx. 20): Banco/financeira 20; Fundo 12; Pessoa 8; Empresa 5.",
-    "Idade da dívida (máx. 20): 10 anos ou mais 20; 6 a 9 anos 15; 3 a 5 anos 8; menos de 3 anos 0.",
-    "Desgaste (máx. 25): bloqueio ou pesquisa com resultado negativo 10; acordo frustrado 10; arquivamento provisório 8.",
-    "Patrimônio (máx. 20): leilão negativo 20; imóvel penhorado, matrícula ou avaliação 15; bem de família 12; penhora 6; veículo 4.",
-    "Vulnerabilidade (máx. 15): superendividamento 15; justiça gratuita deferida ao devedor 8; Defensoria 8; idoso 8; salário ou aposentadoria impenhorável 6.",
-    "Descontos, sem teto: ausência de bens ou art. 921 −10; prescrição intercorrente −10; devedor não identificado −15.",
-    "Alerta, sem pontos: devedor não localizado ou carta devolvida.",
+    "Acordo em outro processo (máx. 30): o mesmo devedor tem acordo homologado em outro processo lido na rodada 30. Só nomes com 3 palavras ou mais.",
+    "Imóvel (máx. 25): leilão negativo 20; imóvel penhorado, matrícula ou avaliação 15; bem de família 8; penhora 6.",
+    "Trânsito em julgado (máx. 15): texto cita trânsito em julgado 15; cumprimento de sentença sem essa frase 10.",
+    "Desgaste (máx. 15): bloqueio ou pesquisa com resultado negativo 10; acordo frustrado 10; arquivamento provisório 8.",
+    "Veículo (máx. 3): Renajud ou veículo 3.",
+    "Credor (máx. 5): Empresa, Pessoa ou Fundo 5. Credor banco fica fora da planilha.",
+    "Idade: processo com menos de 1 ano fica fora. A idade não soma pontos.",
+    "Descontos, sem teto: superendividamento −10; ausência de bens ou art. 921 −10; prescrição intercorrente −10; Defensoria −5; justiça gratuita deferida ao devedor −5; devedor não identificado −15.",
+    "Alerta, sem pontos: devedor não localizado; idoso(a); salário ou aposentadoria impenhorável.",
     "O total nunca fica abaixo de 0. Dentro de cada bloco, os pontos somam até o máximo do bloco.",
 )
 
@@ -158,9 +161,9 @@ def _aba_casos(ws: Worksheet, casos: list[CasoPontuado]) -> None:
                 caso.credor or "",
                 _tipo_credor(caso),
                 _devedor(caso),
-                _rotulos(caso, (Bloco.DESGASTE, Bloco.DESCONTO, Bloco.ALERTA)),
-                _rotulos(caso, (Bloco.PATRIMONIO,)),
-                _rotulos(caso, (Bloco.VULNERABILIDADE,)),
+                _rotulos(caso, (Bloco.DESGASTE,)),
+                _rotulos(caso, (Bloco.ACORDO, Bloco.IMOVEL, Bloco.TRANSITO, Bloco.VEICULO)),
+                _rotulos(caso, (Bloco.DESCONTO, Bloco.ALERTA)),
                 f"{caso.ultima_data:%d/%m} · {caso.ultimo_tipo}",
                 caso.n_publicacoes,
                 _trecho_principal(caso),
@@ -241,6 +244,9 @@ def _aba_como_ler(ws: Worksheet, resumo: ResumoRodada) -> None:
     _escrever(ws, ["Publicações de cobrança", resumo.publicacoes_cobranca])
     _escrever(ws, ["Processos", resumo.processos])
     _escrever(ws, ["Fora por serem só empresa", resumo.processos_so_empresa])
+    _escrever(ws, ["Fora por credor banco", resumo.processos_banco])
+    _escrever(ws, ["Fora por ter menos de 1 ano", resumo.processos_recentes])
+    _escrever(ws, ["Dias de histórico lidos", resumo.dias_historico])
     _escrever(ws, ["Na planilha", resumo.casos_na_planilha])
     _escrever(ws, [])
     _escrever(ws, [f"Gerado em {resumo.gerado_em:%d/%m/%Y %H:%M}"])

@@ -183,6 +183,8 @@ Em uma amostra de 4 publicações com todos os grupos de sinais, só 1 era o tip
 
 ## 9. Sinais e pontuação
 
+> **Substituída em 22/11/2026** pela seção 5 de `2026-11-22-score-reuniao-design.md` (reunião de 13/11). O texto abaixo fica como histórico.
+
 Isto é **ponto de partida**, para calibrar lendo o topo da primeira planilha. *(Pesos e limites são escolha minha.)*
 
 | Bloco | Máximo | Como pontua |

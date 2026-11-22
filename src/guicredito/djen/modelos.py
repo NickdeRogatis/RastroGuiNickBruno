@@ -142,5 +142,8 @@ class ResumoRodada:
     publicacoes_cobranca: int
     processos: int
     processos_so_empresa: int
+    processos_banco: int
+    processos_recentes: int
+    dias_historico: int
     casos_na_planilha: int
     gerado_em: datetime
