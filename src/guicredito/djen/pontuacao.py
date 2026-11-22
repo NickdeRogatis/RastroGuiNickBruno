@@ -1,11 +1,13 @@
 """Turn one case into a score, then rank the list.
 
-``pipeline`` calls ``pontuar`` on each case that still has a natural-person
-debtor, passing the current year. Points come from the creditor type set
-by ``partes``, the debt age on the ``Caso`` built by ``casos``, and the
-``Sinal`` list from ``sinais``. Wear, assets and vulnerability each stop
-at a cap. Discounts do not. A missing debtor subtracts 15 more. The total
-never goes below 0.
+``pipeline`` calls ``pontuar`` on each case that is left after dropping
+company-only debtors, bank creditors and cases under one year old
+(``recente``). Points follow the order set at the 13/11 meeting: a
+settlement in another case (added by ``casos.marcar_acordos``), then real
+estate, then a final judgment, then wear and vehicle, from the ``Sinal``
+list built by ``sinais``. Each block stops at its cap. Discounts do not.
+A missing debtor subtracts 15 more. The total never goes below 0. Age
+adds no points.
 
 ``ordenar`` sorts by total (highest first), then by older debt, then by
 process number, and cuts the list at ``limite``. ``planilha`` writes that
@@ -15,29 +17,22 @@ cut, in that order, as the Casos sheet.
 from collections.abc import Iterable
 
 from guicredito.djen.modelos import Bloco, Caso, CasoPontuado, Pontuacao, TipoCredor
+from guicredito.djen.partes import eh_cumprimento
 
 PONTOS_CREDOR = {
-    TipoCredor.BANCO: 20,
-    TipoCredor.FUNDO: 12,
-    TipoCredor.PESSOA: 8,
+    TipoCredor.FUNDO: 5,
+    TipoCredor.PESSOA: 5,
     TipoCredor.EMPRESA: 5,
 }
 TETO_BLOCO = {
-    Bloco.DESGASTE: 25,
-    Bloco.PATRIMONIO: 20,
-    Bloco.VULNERABILIDADE: 15,
+    Bloco.ACORDO: 30,
+    Bloco.IMOVEL: 25,
+    Bloco.TRANSITO: 15,
+    Bloco.DESGASTE: 15,
+    Bloco.VEICULO: 3,
 }
+PONTOS_CUMPRIMENTO = 10
 DESCONTO_SEM_DEVEDOR = 15
-
-
-def _pontos_idade(anos: int) -> int:
-    if anos >= 10:
-        return 20
-    if anos >= 6:
-        return 15
-    if anos >= 3:
-        return 8
-    return 0
 
 
 def _soma_bloco(caso: Caso, bloco: Bloco) -> int:
@@ -48,17 +43,24 @@ def _soma_bloco(caso: Caso, bloco: Bloco) -> int:
     return min(soma, teto)
 
 
-def pontuar(caso: Caso, ano_atual: int) -> Pontuacao:
-    credor = PONTOS_CREDOR.get(caso.tipo_credor, 0) if caso.tipo_credor is not None else 0
-    idade = _pontos_idade(ano_atual - caso.ano_divida)
+def recente(caso: Caso, ano_atual: int) -> bool:
+    return caso.ano_divida != 0 and ano_atual - caso.ano_divida < 1
+
+
+def pontuar(caso: Caso) -> Pontuacao:
+    acordo = _soma_bloco(caso, Bloco.ACORDO)
+    imovel = _soma_bloco(caso, Bloco.IMOVEL)
+    transito = _soma_bloco(caso, Bloco.TRANSITO)
+    if transito == 0 and eh_cumprimento(caso.classe):
+        transito = PONTOS_CUMPRIMENTO
     desgaste = _soma_bloco(caso, Bloco.DESGASTE)
-    patrimonio = _soma_bloco(caso, Bloco.PATRIMONIO)
-    vulnerabilidade = _soma_bloco(caso, Bloco.VULNERABILIDADE)
+    veiculo = _soma_bloco(caso, Bloco.VEICULO)
+    credor = PONTOS_CREDOR.get(caso.tipo_credor, 0) if caso.tipo_credor is not None else 0
     descontos = _soma_bloco(caso, Bloco.DESCONTO)
     if caso.devedor is None:
         descontos -= DESCONTO_SEM_DEVEDOR
-    total = max(0, credor + idade + desgaste + patrimonio + vulnerabilidade + descontos)
-    return Pontuacao(credor, idade, desgaste, patrimonio, vulnerabilidade, descontos, total)
+    total = max(0, acordo + imovel + transito + desgaste + veiculo + credor + descontos)
+    return Pontuacao(acordo, imovel, transito, desgaste, veiculo, credor, descontos, total)
 
 
 def ordenar(casos: Iterable[CasoPontuado], limite: int) -> list[CasoPontuado]:

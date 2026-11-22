@@ -116,11 +116,12 @@ class Caso:
 
 @dataclass(frozen=True)
 class Pontuacao:
-    credor: int
-    idade: int
+    acordo_anterior: int
+    imovel: int
+    transito: int
     desgaste: int
-    patrimonio: int
-    vulnerabilidade: int
+    veiculo: int
+    credor: int
     descontos: int
     total: int
 
