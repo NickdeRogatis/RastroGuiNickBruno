@@ -26,9 +26,11 @@ class TipoCredor(StrEnum):
 
 
 class Bloco(StrEnum):
+    ACORDO = "acordo"
+    IMOVEL = "imovel"
+    TRANSITO = "transito"
     DESGASTE = "desgaste"
-    PATRIMONIO = "patrimonio"
-    VULNERABILIDADE = "vulnerabilidade"
+    VEICULO = "veiculo"
     DESCONTO = "desconto"
     ALERTA = "alerta"
 

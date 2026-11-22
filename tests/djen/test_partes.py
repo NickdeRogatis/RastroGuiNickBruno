@@ -3,6 +3,7 @@ import pytest
 from guicredito.djen.modelos import TipoCredor
 from guicredito.djen.partes import (
     classe_de_cobranca,
+    eh_cumprimento,
     eh_empresa,
     partes_do_cabecalho,
     tipo_credor,
@@ -116,3 +117,15 @@ def test_executados_no_plural_separa_pessoa_e_empresa():
     )
     _, devedores = partes_do_cabecalho(texto)
     assert devedores == ["JOÃO EXEMPLO LTDA", "JOÃO EXEMPLO"]
+
+
+@pytest.mark.parametrize(
+    "classe,esperado",
+    [
+        ("CUMPRIMENTO DE SENTENçA", True),
+        ("Cumprimento Provisório de Sentença", True),
+        ("EXECUÇÃO DE TÍTULO EXTRAJUDICIAL", False),
+    ],
+)
+def test_eh_cumprimento(classe, esperado):
+    assert eh_cumprimento(classe) is esperado

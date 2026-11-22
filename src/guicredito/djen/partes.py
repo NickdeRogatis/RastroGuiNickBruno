@@ -78,6 +78,10 @@ _PALAVRA_CURTA = re.compile(r"\b(?:epp|mei|cia)\b")
 _ME_NO_FIM = re.compile(r"(?:^|\s)me$")
 
 
+def eh_cumprimento(nome_classe: str) -> bool:
+    return bool(_CUMPRIMENTO.search(normalizar(nome_classe)))
+
+
 def classe_de_cobranca(nome_classe: str) -> bool:
     nome = normalizar(nome_classe)
     if any(marca in nome for marca in _FORA):

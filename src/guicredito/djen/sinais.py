@@ -7,8 +7,10 @@ TJSP boilerplate (fee instructions, generic SisbaJud notices, the
 Defensoria template). What remains is checked against ``CATALOGO``: one
 hit per key, kept as a ``Sinal`` from ``modelos``.
 
-The block on each signal (wear, assets, vulnerability, discount, alert)
-is what ``pontuacao`` later sums, up to that block's cap. The label and
+The block on each signal (settlement, real estate, final judgment, wear,
+vehicle, discount, alert) is what ``pontuacao`` later sums, up to that
+block's cap. ``acordo_homologado`` is worth 0 here: ``casos.marcar_acordos``
+turns it into points on the debtor's *other* cases. The label and
 the quoted sentence are what ``planilha`` prints in the signal columns.
 """
 
@@ -59,8 +61,25 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
         re.compile(r"arquiv\w*.{0,15}provisori\w*"),
     ),
     (
+        "acordo_homologado",
+        Bloco.ACORDO,
+        0,
+        "acordo homologado neste processo",
+        re.compile(r"homolog\w*.{0,40}acordo|acordo.{0,40}homologad|acordo celebrado entre as partes"),
+    ),
+    (
+        "transito_em_julgado",
+        Bloco.TRANSITO,
+        15,
+        "trânsito em julgado",
+        re.compile(
+            r"transitou em julgado|transitad[oa] em julgado"
+            r"|certific\w*.{0,40}transito em julgado|ocorreu o transito em julgado"
+        ),
+    ),
+    (
         "leilao_negativo",
-        Bloco.PATRIMONIO,
+        Bloco.IMOVEL,
         20,
         "leilão negativo",
         re.compile(
@@ -70,44 +89,44 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
     ),
     (
         "imovel_penhorado",
-        Bloco.PATRIMONIO,
+        Bloco.IMOVEL,
         15,
         "imóvel penhorado/avaliado",
         re.compile(r"penhor\w*.{0,25}imovel|avaliacao do imovel|imovel de matricula"),
     ),
     (
         "bem_de_familia",
-        Bloco.PATRIMONIO,
-        12,
+        Bloco.IMOVEL,
+        8,
         "bem de família",
         re.compile(r"bem de familia"),
     ),
     (
         "penhora",
-        Bloco.PATRIMONIO,
+        Bloco.IMOVEL,
         6,
         "penhora",
         re.compile(r"\bpenhora\b"),
     ),
     (
         "veiculo",
-        Bloco.PATRIMONIO,
-        4,
+        Bloco.VEICULO,
+        3,
         "veículo",
         re.compile(r"\brenajud\b|\bveiculo\b"),
     ),
     (
         "superendividamento",
-        Bloco.VULNERABILIDADE,
-        15,
-        "superendividamento",
+        Bloco.DESCONTO,
+        -10,
+        "⚠ superendividamento",
         re.compile(r"superendividamento"),
     ),
     (
         "gratuidade_devedor",
-        Bloco.VULNERABILIDADE,
-        8,
-        "justiça gratuita (devedor)",
+        Bloco.DESCONTO,
+        -5,
+        "⚠ justiça gratuita (devedor)",
         re.compile(
             r"(?<![a-z])(?:defir|deferid|conced)\w*.{0,80}"
             r"(?:executad[oa]|devedor).{0,80}justica gratuita"
@@ -117,23 +136,23 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
     ),
     (
         "defensoria",
-        Bloco.VULNERABILIDADE,
-        8,
-        "Defensoria Pública",
+        Bloco.DESCONTO,
+        -5,
+        "⚠ Defensoria Pública",
         re.compile(r"defensoria"),
     ),
     (
         "idoso",
-        Bloco.VULNERABILIDADE,
-        8,
-        "idoso(a)",
+        Bloco.ALERTA,
+        0,
+        "⚠ idoso(a)",
         re.compile(r"\bidos[oa]\b"),
     ),
     (
         "salario_impenhoravel",
-        Bloco.VULNERABILIDADE,
-        6,
-        "salário/aposentadoria impenhorável",
+        Bloco.ALERTA,
+        0,
+        "⚠ salário/aposentadoria impenhorável",
         re.compile(
             r"(salario|aposentadoria|proventos).{0,60}impenhor"
             r"|impenhor.{0,60}(salario|aposentadoria|proventos)"

@@ -54,8 +54,10 @@ PADRAO_9 = (
 )
 
 D = Bloco.DESGASTE
-P = Bloco.PATRIMONIO
-V = Bloco.VULNERABILIDADE
+P = Bloco.IMOVEL
+VE = Bloco.VEICULO
+T = Bloco.TRANSITO
+AC = Bloco.ACORDO
 X = Bloco.DESCONTO
 A = Bloco.ALERTA
 
@@ -80,36 +82,36 @@ DETECTAR = [
         "Lavre-se o termo de penhora do imóvel de matrícula nº 12.345.",
     ),
     ("imovel_penhorado", P, 15, "imóvel penhorado/avaliado", "Juntado o laudo de avaliação do imóvel."),
-    ("bem_de_familia", P, 12, "bem de família", "Alega a executada tratar-se de bem de família."),
+    ("bem_de_familia", P, 8, "bem de família", "Alega a executada tratar-se de bem de família."),
     ("penhora", P, 6, "penhora", "Defiro a penhora on-line."),
-    ("veiculo", P, 4, "veículo", "Restrição via RENAJUD sobre o veículo."),
+    ("veiculo", VE, 3, "veículo", "Restrição via RENAJUD sobre o veículo."),
     (
         "superendividamento",
-        V,
-        15,
-        "superendividamento",
+        X,
+        -10,
+        "⚠ superendividamento",
         "Repactuação com base na Lei 14.181/2021 (superendividamento).",
     ),
     (
         "gratuidade_devedor",
-        V,
-        8,
-        "justiça gratuita (devedor)",
+        X,
+        -5,
+        "⚠ justiça gratuita (devedor)",
         "Defiro ao executado os benefícios da justiça gratuita.",
     ),
-    ("defensoria", V, 8, "Defensoria Pública", "O executado é assistido pela Defensoria Pública."),
+    ("defensoria", X, -5, "⚠ Defensoria Pública", "O executado é assistido pela Defensoria Pública."),
     (
         "idoso",
-        V,
-        8,
-        "idoso(a)",
+        A,
+        0,
+        "⚠ idoso(a)",
         "Anote-se a prioridade de tramitação, por ser a executada pessoa idosa.",
     ),
     (
         "salario_impenhoravel",
-        V,
-        6,
-        "salário/aposentadoria impenhorável",
+        A,
+        0,
+        "⚠ salário/aposentadoria impenhorável",
         "Os valores bloqueados são proventos de aposentadoria, impenhoráveis nos termos do art. 833, IV, do CPC.",
     ),
     ("sem_bens", X, -10, "⚠ sem bens localizados", "Não foram localizados bens penhoráveis."),
@@ -186,6 +188,29 @@ DETECTAR = [
     ("sem_bens", X, -10, "⚠ sem bens localizados", "Ausência de bens penhoráveis."),
     ("sem_bens", X, -10, "⚠ sem bens localizados", "Cuida-se de execução frustrada."),
     ("acordo_frustrado", D, 10, "acordo frustrado", "O acordo restou infrutífero."),
+    (
+        "acordo_homologado",
+        AC,
+        0,
+        "acordo homologado neste processo",
+        "Homologo o acordo celebrado entre as partes.",
+    ),
+    (
+        "acordo_homologado",
+        AC,
+        0,
+        "acordo homologado neste processo",
+        "Fica homologado o acordo de fls. 120.",
+    ),
+    ("transito_em_julgado", T, 15, "trânsito em julgado", "A sentença transitou em julgado em 2019."),
+    (
+        "transito_em_julgado",
+        T,
+        15,
+        "trânsito em julgado",
+        "Certifico que ocorreu o trânsito em julgado da sentença.",
+    ),
+    ("transito_em_julgado", T, 15, "trânsito em julgado", "Decisão transitada em julgado."),
 ]
 
 NAO_DETECTAR = [
@@ -200,6 +225,10 @@ NAO_DETECTAR = [
     ("salario_impenhoravel", "Comprove o executado a impenhorabilidade."),
     ("sem_bens", "Suspendo o processo por 30 dias."),
     ("gratuidade_devedor", "Indefiro ao executado os benefícios da justiça gratuita."),
+    ("acordo_homologado", "Não houve acordo entre as partes."),
+    ("acordo_homologado", "Designo audiência de conciliação."),
+    ("transito_em_julgado", "Após o trânsito em julgado, arquivem-se os autos."),
+    ("transito_em_julgado", "Aguarde-se o trânsito em julgado."),
 ]
 
 
