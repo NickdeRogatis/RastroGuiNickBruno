@@ -13,6 +13,7 @@ PROC_B = "10000021820228260002"
 PROC_C = "10000031820228260003"
 PROC_D = "10000041820228260004"
 PROC_E = "10000051820228260005"
+PROC_F = "10000061820228260006"
 CNJ_A = "1000001-18.2022.8.26.0001"
 CNJ_E = "1000005-18.2022.8.26.0005"
 
@@ -59,7 +60,7 @@ def test_rodar_ponta_a_ponta(tmp_path, item, fazer_zip):
             numero_processo=PROC_A,
             texto="<p>A pesquisa via SISBAJUD restou infrutífera.</p>",
             destinatarios=[
-                {"nome": "BANCO EXEMPLO S.A.", "polo": "A"},
+                {"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"},
                 {"nome": "JOÃO EXEMPLO", "polo": "P"},
             ],
         ),
@@ -83,7 +84,15 @@ def test_rodar_ponta_a_ponta(tmp_path, item, fazer_zip):
             numero_processo=PROC_E,
             nomeClasse="CUMPRIMENTO DE SENTENçA",
             texto="<p>Texto.</p>",
-            destinatarios=[{"nome": "BANCO EXEMPLO S.A.", "polo": "A"}],
+            destinatarios=[{"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"}],
+        ),
+        item(
+            id=7,
+            numero_processo=PROC_F,
+            destinatarios=[
+                {"nome": "BANCO EXEMPLO S.A.", "polo": "A"},
+                {"nome": "ANA FICTÍCIA", "polo": "P"},
+            ],
         ),
     ]
     dia_09 = [
@@ -93,7 +102,7 @@ def test_rodar_ponta_a_ponta(tmp_path, item, fazer_zip):
             numero_processo=PROC_A,
             texto="<p>Intime-se.</p>",
             destinatarios=[
-                {"nome": "BANCO EXEMPLO S.A.", "polo": "A"},
+                {"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"},
                 {"nome": "JOÃO EXEMPLO", "polo": "P"},
             ],
         )
@@ -105,10 +114,12 @@ def test_rodar_ponta_a_ponta(tmp_path, item, fazer_zip):
     )
     caminho, resumo = _rodar(tmp_path, cliente, date(2026, 11, 6), date(2026, 11, 9))
     assert caminho.is_file()
-    assert resumo.publicacoes_lidas == 6
-    assert resumo.publicacoes_cobranca == 4
-    assert resumo.processos == 3
+    assert resumo.publicacoes_lidas == 7
+    assert resumo.publicacoes_cobranca == 5
+    assert resumo.processos == 4
     assert resumo.processos_so_empresa == 1
+    assert resumo.processos_banco == 1
+    assert resumo.processos_recentes == 0
     assert resumo.casos_na_planilha == 2
 
     wb = load_workbook(caminho)
@@ -140,7 +151,7 @@ def test_rodar_respeita_limite(tmp_path, item, fazer_zip):
             id=i,
             numero_processo=numero,
             destinatarios=[
-                {"nome": "BANCO EXEMPLO S.A.", "polo": "A"},
+                {"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"},
                 {"nome": nome, "polo": "P"},
             ],
         )
@@ -162,5 +173,74 @@ def test_parse_args():
     assert args.inicio == date(2026, 11, 3)
     assert args.limite == 300
     assert args.tribunal == "TJSP"
+    assert args.historico == 0
+    assert parse_args(["--historico", "20"]).historico == 20
     with pytest.raises(SystemExit):
         parse_args(["--inicio", "2026-11-03"])
+
+
+def _linhas_casos(caminho) -> dict[str, dict[str, object]]:
+    aba = load_workbook(caminho)["Casos"]
+    cabecalho = [c.value for c in aba[1]]
+    return {
+        row[cabecalho.index("Processo")]: dict(zip(cabecalho, row, strict=True))
+        for row in aba.iter_rows(min_row=2, values_only=True)
+    }
+
+
+def test_caso_do_ano_corrente_fica_fora(tmp_path, item, fazer_zip):
+    novo = item(
+        id=1,
+        numero_processo="10000091820268260009",
+        destinatarios=[
+            {"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"},
+            {"nome": "JOÃO EXEMPLO", "polo": "P"},
+        ],
+    )
+    cliente = _cliente(tmp_path, fazer_zip, {date(2026, 11, 6): [novo]})
+    caminho, resumo = _rodar(tmp_path, cliente, date(2026, 11, 6), date(2026, 11, 6))
+    assert resumo.processos_recentes == 1
+    assert resumo.casos_na_planilha == 0
+    assert _linhas_casos(caminho) == {}
+
+
+def test_historico_acha_acordo(tmp_path, item, fazer_zip):
+    devedor = {"nome": "JOSÉ CARLOS DA SILVA", "polo": "P"}
+    acordo = item(
+        id=1,
+        data_disponibilizacao="2026-11-06",
+        numero_processo=PROC_A,
+        texto="<p>Homologo o acordo celebrado entre as partes.</p>",
+        destinatarios=[{"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"}, devedor],
+    )
+    outro = item(
+        id=2,
+        data_disponibilizacao="2026-11-09",
+        numero_processo=PROC_B,
+        texto="<p>Intime-se.</p>",
+        destinatarios=[{"nome": "LOJA EXEMPLO LTDA", "polo": "A"}, devedor],
+    )
+    cliente = _cliente(
+        tmp_path,
+        fazer_zip,
+        {date(2026, 11, 6): [acordo], date(2026, 11, 9): [outro]},
+    )
+    caminho, resumo = _rodar(
+        tmp_path, cliente, date(2026, 11, 9), date(2026, 11, 9), historico=1
+    )
+    assert resumo.dias_historico == 1
+    assert resumo.publicacoes_lidas == 1
+    linhas = _linhas_casos(caminho)
+    assert "1000001-18.2022.8.26.0001" not in linhas
+    linha = linhas["1000002-18.2022.8.26.0002"]
+    assert "acordo em outro processo" in linha["Sinais de patrimônio"]
+
+
+def test_historico_sem_caderno_segue(tmp_path, item, fazer_zip):
+    cliente = _cliente(tmp_path, fazer_zip, {date(2026, 11, 9): [item(id=1)]})
+    caminho, resumo = _rodar(
+        tmp_path, cliente, date(2026, 11, 9), date(2026, 11, 9), historico=1
+    )
+    assert caminho.is_file()
+    assert resumo.dias_historico == 0
+    assert resumo.dias_sem_caderno == []

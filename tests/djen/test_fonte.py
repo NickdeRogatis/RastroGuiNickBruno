@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 
 from guicredito.djen.fonte import (
+    dias_uteis_antes,
     URL_CADERNO,
     ErroDownload,
     baixar_caderno,
@@ -106,3 +107,12 @@ def test_hash_diferente_conta_como_falha(tmp_path):
     c = ClienteFalso({URL_06: meta(b"zip")}, {"https://s3/z": b"corrompido"})
     with pytest.raises(ErroDownload):
         baixar_caderno(c, "TJSP", date(2026, 11, 6), tmp_path, espera=lambda s: None)
+
+
+def test_dias_uteis_antes():
+    assert dias_uteis_antes(date(2026, 11, 9), 3) == [
+        date(2026, 11, 4),
+        date(2026, 11, 5),
+        date(2026, 11, 6),
+    ]
+    assert dias_uteis_antes(date(2026, 11, 9), 0) == []

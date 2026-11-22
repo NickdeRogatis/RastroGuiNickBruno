@@ -81,6 +81,17 @@ def dias_uteis(inicio: date, fim: date) -> list[date]:
     return dias
 
 
+def dias_uteis_antes(inicio: date, n: int) -> list[date]:
+    dia = inicio - timedelta(days=1)
+    achados: list[date] = []
+    while len(achados) < n:
+        if dia.weekday() < 5:
+            achados.append(dia)
+        dia -= timedelta(days=1)
+    achados.reverse()
+    return achados
+
+
 def periodo_padrao(hoje: date) -> tuple[date, date]:
     dia = hoje - timedelta(days=1)
     achados: list[date] = []
