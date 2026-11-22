@@ -1,3 +1,8 @@
+# What this file is for: it is the "main" of the project.
+# `python -m guicredito.djen` lands here. It downloads the TJSP gazettes for
+# the chosen days, keeps the collection cases, marks settlements in other
+# cases, drops company-only, bank and under-one-year cases, scores the rest,
+# and writes the Excel sheet. Every other file is one step called from here.
 """Run the whole command, from dates to the printed summary.
 
 ``__main__.py`` calls ``main``. ``main`` reads ``--inicio``, ``--fim``,

@@ -13,7 +13,7 @@ Commits `f7dbd37` to `d63c248` on `feature/djen-casos`. To see the full diff in 
 | ❌ | Removed |
 | 🐞 | Fix found in the first real run (04–06/11), after the planned work |
 
-Line numbers are for commit `d63c248`.
+Line numbers are for the current `feature/djen-casos`.
 
 ## Read in this order
 
@@ -29,9 +29,9 @@ The nouns the other files share.
 
 - ✏️ `Bloco` (line 28): now `ACORDO`, `IMOVEL`, `TRANSITO`, `DESGASTE`, `VEICULO`, `DESCONTO`, `ALERTA`.
 - ❌ `Bloco.PATRIMONIO` and `Bloco.VULNERABILIDADE`: gone. Real estate and vehicle are separate blocks now. The vulnerability signals became discounts or alerts.
-- ✏️ `Pontuacao` (line 118): eight fields in the meeting's order: `acordo_anterior`, `imovel`, `transito`, `desgaste`, `veiculo`, `credor`, `descontos`, `total`.
+- ✏️ `Pontuacao` (line 125): eight fields in the meeting's order: `acordo_anterior`, `imovel`, `transito`, `desgaste`, `veiculo`, `credor`, `descontos`, `total`.
 - ❌ `Pontuacao.idade`, `.patrimonio`, `.vulnerabilidade`: gone.
-- 🆕 `ResumoRodada.processos_banco`, `.processos_recentes`, `.dias_historico` (line 145): the new funnel counts.
+- 🆕 `ResumoRodada.processos_banco`, `.processos_recentes`, `.dias_historico` (line 152): the new funnel counts.
 
 ### 3. [src/guicredito/djen/sinais.py](src/guicredito/djen/sinais.py) ✏️
 
@@ -76,15 +76,15 @@ Short. The whole score in one place.
 
 ### 8. [src/guicredito/djen/pipeline.py](src/guicredito/djen/pipeline.py) ✏️
 
-Read `rodar` (line 50) again.
+Read `rodar` (line 55) again.
 
-- 🆕 History download (line 73): `historico` extra weekdays before `--inicio`, read only to find settlements. Their cases never go on the sheet. A day with no caderno prints `sem caderno em dd/mm` and the run goes on.
-- 🆕 `marcar_acordos` call (line 93).
-- 🆕 Bank filter (line 96): a case whose main creditor is a bank is dropped before scoring.
-- 🆕 Under-1-year filter (line 98).
-- ✏️ `pontuar(caso)` (line 100): no year argument.
-- 🆕 `--historico N` in `parse_args` (line 144). Default 0. Negative numbers are rejected.
-- 🆕 `main` (line 169) prints three new lines: history days, bank cases dropped, under-1-year cases dropped.
+- 🆕 History download (line 78): `historico` extra weekdays before `--inicio`, read only to find settlements. Their cases never go on the sheet. A day with no caderno prints `sem caderno em dd/mm` and the run goes on.
+- 🆕 `marcar_acordos` call (line 98).
+- 🆕 Bank filter (line 101): a case whose main creditor is a bank is dropped before scoring.
+- 🆕 Under-1-year filter (line 103).
+- ✏️ `pontuar(caso)` (line 105): no year argument.
+- 🆕 `--historico N` in `parse_args` (line 149). Default 0. Negative numbers are rejected.
+- 🆕 `main` (line 174) prints three new lines: history days, bank cases dropped, under-1-year cases dropped.
 
 ### 9. [src/guicredito/djen/planilha.py](src/guicredito/djen/planilha.py) ✏️
 
