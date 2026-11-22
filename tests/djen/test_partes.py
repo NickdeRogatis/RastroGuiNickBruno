@@ -129,3 +129,35 @@ def test_executados_no_plural_separa_pessoa_e_empresa():
 )
 def test_eh_cumprimento(classe, esperado):
     assert eh_cumprimento(classe) is esperado
+
+
+@pytest.mark.parametrize(
+    "nome",
+    [
+        "INSTITUTO NACIONAL DO SEGURO SOCIAL - INSS",
+        "PREFEITURA MUNICIPAL DE SÃO PAULO",
+        "FAZENDA PÚBLICA DO ESTADO DE SÃO PAULO",
+        "MUNICÍPIO DE EXEMPLO",
+        "UNIÃO FEDERAL",
+        "UNIMED EXEMPLO COOPERATIVA DE TRABALHO MÉDICO",
+        "CENTRAL NACIONAL UNIMED - COOPERATIVA CENTRAL",
+        "EXEMPLO COOP HABITACIONAL",
+        "SINDICATO DOS EXEMPLOS DE SÃO PAULO",
+        "FUNDAÇÃO EXEMPLO",
+        "SÃO PAULO PREVIDÊNCIA - SPPREV",
+        "TIM S A",
+        "IBERIA LINEAS AEREAS DE ESPAÑA SOCIEDAD ANONIMA OPERADORA",
+        "MASTER PREV CLUBE DE BENEFÍCIOS",
+        "IGREJA EXEMPLO DO REINO",
+        "CEB - CENTRO DE ESTUDOS DOS BENEFÍCIOS DOS APOSENTADOS",
+        "DETRAN - DEPARTAMENTO ESTADUAL DE TRÂNSITO",
+    ],
+)
+def test_orgao_publico_e_cooperativa_nao_sao_pessoa(nome):
+    assert eh_empresa(nome)
+    assert tipo_credor(nome) is not TipoCredor.PESSOA
+
+
+@pytest.mark.parametrize("nome", ["JOSÉ CARLOS DA COSTA", "MARIA UNIÃO EXEMPLO", "ANA COOPER FICTÍCIA"])
+def test_nome_de_pessoa_continua_pessoa(nome):
+    assert not eh_empresa(nome)

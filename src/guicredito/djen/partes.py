@@ -45,6 +45,11 @@ _EMPRESA = (
     "condominio",
     "associacao",
 )
+_ENTIDADE = re.compile(
+    r"\b(?:instituto|prefeitura|municipio de|fazenda publica|fazenda do estado|uniao federal"
+    r"|cooperativa|coop|unimed|sindicato|fundacao|autarquia|previdencia|secretaria"
+    r"|departamento|universidade|servico autonomo|clube|igreja|centro de|sociedad|s a)\b"
+)
 _FORA = (
     "fazenda publica",
     "alimentos",
@@ -94,7 +99,7 @@ def classe_de_cobranca(nome_classe: str) -> bool:
 def _empresa_pelo_nome(nome: str) -> bool:
     if any(marca in nome for marca in (*_FUNDO, *_BANCO, *_EMPRESA)):
         return True
-    if re.search(r"\bsa\b", nome):
+    if re.search(r"\bsa\b", nome) or _ENTIDADE.search(nome):
         return True
     return _ME_NO_FIM.search(nome) is not None or _PALAVRA_CURTA.search(nome) is not None
 
