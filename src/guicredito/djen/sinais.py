@@ -34,6 +34,7 @@ PADROES: list[re.Pattern[str]] = [
     re.compile(r"quando representado pela defensoria publica ou nao tiver procurador"),
     re.compile(r"registro geral de indicacao da defensoria"),
     re.compile(r"cumprimento de sentenca relativo a acordo homologado"),
+    re.compile(r"\[penhora de imovel\] se houver requerimento de penhora de imovel"),
 ]
 
 CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [

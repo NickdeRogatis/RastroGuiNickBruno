@@ -242,6 +242,11 @@ NAO_DETECTAR = [
     ("arquivamento_provisorio", PADRAO_2),
     ("leilao_negativo", "Nomeio leiloeiro oficial."),
     ("imovel_penhorado", "Indique o exequente bens à penhora."),
+    (
+        "imovel_penhorado",
+        "3.2.[PENHORA DE IMÓVEL] Se houver requerimento de penhora de imóvel do executado, "
+        "junte o exequente a matrícula atualizada.",
+    ),
     ("veiculo", PADRAO_3),
     ("gratuidade_devedor", "Defiro ao exequente os benefícios da justiça gratuita."),
     ("gratuidade_devedor", PADRAO_1),
