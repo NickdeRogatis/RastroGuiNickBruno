@@ -13,6 +13,7 @@ hash deletes the ``.part`` file and tries again, up to three times.
 import hashlib
 import http.client
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -20,6 +21,8 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Protocol
+
+import certifi
 
 from guicredito.djen.modelos import CadernoInfo
 
@@ -29,9 +32,10 @@ _USER_AGENT = "GUICredito/0.1"
 
 
 class HttpErro(Exception):
-    def __init__(self, status: int):
+    def __init__(self, status: int, detalhe: str = ""):
         self.status = status
-        super().__init__(f"HTTP {status}")
+        mensagem = f"HTTP {status}" if status else "Falha de conexão"
+        super().__init__(f"{mensagem}: {detalhe}" if detalhe else mensagem)
 
 
 class ErroDownload(Exception):
@@ -47,15 +51,17 @@ class ClienteHttp(Protocol):
 class ClienteUrllib:
     def __init__(self, timeout: float = 60):
         self.timeout = timeout
+        self.contexto_ssl = ssl.create_default_context()
+        self.contexto_ssl.load_verify_locations(cafile=certifi.where())
 
     def _abrir(self, url: str):
         pedido = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         try:
-            return urllib.request.urlopen(pedido, timeout=self.timeout)
+            return urllib.request.urlopen(pedido, timeout=self.timeout, context=self.contexto_ssl)
         except urllib.error.HTTPError as erro:
             raise HttpErro(erro.code) from erro
         except (urllib.error.URLError, TimeoutError, OSError) as erro:
-            raise HttpErro(0) from erro
+            raise HttpErro(0, str(erro)) from erro
 
     def get_json(self, url: str) -> dict:
         with self._abrir(url) as resposta:
@@ -68,7 +74,7 @@ class ClienteUrllib:
                 while bloco := resposta.read(_BLOCO):
                     saida.write(bloco)
         except (TimeoutError, OSError, http.client.HTTPException) as erro:
-            raise HttpErro(0) from erro
+            raise HttpErro(0, str(erro)) from erro
 
 
 def dias_uteis(inicio: date, fim: date) -> list[date]:
@@ -146,7 +152,7 @@ def baixar_caderno(
         except HttpErro as erro:
             if erro.status == 404:
                 return None
-            motivo = f"HTTP {erro.status}"
+            motivo = str(erro)
             if tentativa < 3:
                 espera(2 if tentativa == 1 else 4)
             continue
@@ -167,7 +173,7 @@ def baixar_caderno(
         except (HttpErro, TimeoutError, OSError) as erro:
             motivo = erro.args[0] if erro.args else type(erro).__name__
             if isinstance(erro, HttpErro):
-                motivo = f"HTTP {erro.status}"
+                motivo = str(erro)
             parcial.unlink(missing_ok=True)
         if tentativa < 3:
             espera(2 if tentativa == 1 else 4)
