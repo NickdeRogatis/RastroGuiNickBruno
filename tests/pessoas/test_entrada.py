@@ -122,3 +122,9 @@ def test_celula_com_documentos_e_advogado_qualificado():
     alvos = extrair_alvos(partes, [], {"processo": "ficcao"})
     assert [(a["nome"], a["papel"]) for a in alvos] == [("BANCO EXEMPLO S.A.", "credor"), ("ANA EXEMPLO", "advogado")]
     assert alvos[0]["cnpj"] == "00000001000136"
+
+
+def test_comarca_do_processo_nao_atribui_cidade_a_pessoas(entradas):
+    entrada = ler_entrada(*entradas)
+    assert entrada.casos[0].get("comarca") == "Cidade Exemplo"
+    assert all(not alvo.get("cidade") for alvo in entrada.alvos)

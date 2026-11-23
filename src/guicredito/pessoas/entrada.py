@@ -97,7 +97,7 @@ def extrair_alvos(partes, publicacoes, caso):
                 alvos[chave] = {
                     "id": chave, "processo": processo, "papel": papel, "nome": nome,
                     "tipo": "PJ" if cnpj or eh_empresa(nome) else "PF", "lado": papel,
-                    "origem": {"fonte": origem}, "cidade": caso.get("cidade") or "",
+                    "origem": {"fonte": origem}, "cidade": "",
                 }
             if cnpj:
                 alvos[chave].update(tipo="PJ", cnpj=re.sub(r"\D", "", cnpj[1]))
@@ -112,7 +112,7 @@ def extrair_alvos(partes, publicacoes, caso):
             incluir(papel, nome, "Publicações")
     from .oab import extrair_advogados
 
-    advogados = extrair_advogados(partes, publicacoes, processo, caso.get("cidade") or "")
+    advogados = extrair_advogados(partes, publicacoes, processo)
     return [*alvos.values(), *advogados]
 
 
@@ -244,7 +244,7 @@ def ler_entrada(selecao: Path, aprofundamento: Path, planilha: Path) -> Entrada:
             if numero in vistas or (row["#"], row["Pontos"]) != (caso["posicao_original"], caso["pontuacao_original"]):
                 raise ValueError("Posição ou pontuação divergente na planilha.")
             vistas.add(numero)
-            caso.update(cidade=row.get("Comarca") or "", classe=row.get("Classe") or "",
+            caso.update(comarca=row.get("Comarca") or "", classe=row.get("Classe") or "",
                         devedor=row["Devedor"], credor=row["Credor"])
         if vistas != casos.keys():
             raise ValueError("Processo selecionado ausente na planilha.")

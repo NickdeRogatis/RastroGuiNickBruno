@@ -92,8 +92,38 @@ def _unir(destino, itens):
 
 def _registros(caso, alvo, indice, oab):
     if alvo["papel"] == "advogado":
-        linha = oab(alvo)
+        from .oab import CaptchaOAB, consulta_oab
+
+        consulta = _consulta(caso, alvo, "OAB")
+        if consulta["estado"] in {"consultado", "sem_resultados", "nao_verificado"}:
+            return
+        linha = consulta_oab(alvo)
+        try:
+            consultar = getattr(oab, "consultar", oab)
+            resposta = consultar(alvo)
+            itens = [resposta] if isinstance(resposta, dict) else resposta
+            if not isinstance(itens, list) or any(r.get("alvo_id") != alvo["id"] for r in itens):
+                raise ValueError("Resposta OAB incompatível com o alvo.")
+            if len(itens) == 1 and itens[0].get("estado") in {"pendente", "captcha", "nao_verificado"}:
+                linha.update(itens[0])
+                linha["estado"] = "pendente"
+                estado = "nao_verificado"
+            else:
+                estado = "consultado" if itens else "sem_resultados"
+                linha.update(estado=estado, motivo="")
+                for item in itens:
+                    candidato = dict(item)
+                    evidencias = candidato.pop("evidencias", [])
+                    _unir(caso["evidencias"], evidencias)
+                    _unir(caso["candidatos"], [candidato])
+        except CaptchaOAB:
+            estado = "nao_verificado"
+            linha.update(estado="pendente", motivo="captcha")
+        except Exception:
+            consulta.update(estado="interrompido", motivo="Falha no cadastro OAB.", data=_agora())
+            raise ValueError("Cadastro OAB indisponível.") from None
         _unir(caso["oab"], [linha])
+        consulta.update(estado=estado, motivo=linha["motivo"], data=_agora())
         return
     if alvo["tipo"] != "PJ" and alvo["papel"] != "devedor":
         return

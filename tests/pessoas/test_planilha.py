@@ -130,3 +130,22 @@ def test_pendencia_oab_identifica_motivo_e_preserva_origem(tmp_path, dados_excel
     ws = load_workbook(caminho)["OAB"]
     assert "captcha" in ws["E2"].value and "pendente" in ws["E2"].value
     assert ws["D2"].value == "https://cadastro.example"
+
+
+def test_cidade_requer_evidencia_do_candidato_e_cadastro_pj_nao_gera_vinculo(tmp_path, dados_excel):
+    caso = dados_excel["casos"][0]
+    caso["alvos"][0]["cidade"] = "COMARCA EXEMPLO"
+    caso["candidatos"][0]["cidade"] = "CIDADE DOCUMENTADA"
+    caso["alvos"].append(dict(id="pj", papel="devedor", tipo="PJ"))
+    caso["candidatos"].append(dict(id="cadastro-pj", alvo_id="pj", nome="EMPRESA EXEMPLO",
+                                  empresa="EMPRESA EXEMPLO", categoria="cadastro empresarial", fonte="CNPJ"))
+    caminho = tmp_path / "teste.xlsx"
+    gravar_planilha(caminho, dados_excel, {})
+    wb = load_workbook(caminho, read_only=True)
+    try:
+        col = list(wb["Candidatos"].values)
+        cidades = {r[2]: r[col[0].index("Cidade")] for r in col[1:]}
+        assert cidades == {"c1": "CIDADE DOCUMENTADA", "c2": None, "cadastro-pj": None}
+        assert "cadastro-pj" not in [r[1] for r in wb["Vínculos"].values]
+    finally:
+        wb.close()

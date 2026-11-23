@@ -123,3 +123,11 @@ def test_pj_sem_inscricao_completa_mantem_estabelecimentos_distintos(snapshot):
     achados = IndiceCNPJ(snapshot[-1]).consultar(pj)
     assert {a["situacao"] for a in achados} == {"ATIVA", "BAIXADA"}
     assert len({a["id"] for a in achados}) == 2
+
+
+def test_registro_societario_sem_cidade_do_socio(snapshot):
+    preparar_cnpj(*snapshot)
+    alvo = {"id": "pessoa", "processo": "caso", "nome": "JOÃO EXEMPLO", "cidade": "COMARCA EXEMPLO",
+            "tipo": "PF", "papel": "devedor"}
+    resultados = IndiceCNPJ(snapshot[-1]).consultar(alvo)
+    assert len(resultados) == 2 and all("cidade" not in r for r in resultados)

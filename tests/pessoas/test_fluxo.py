@@ -97,3 +97,47 @@ def test_descarte_vencido(tmp_path):
     with pytest.raises(ValueError):
         fluxo.confirmar_descarte(lote,previa["codigo"])
     assert (lote / cnj(1)).is_dir()
+
+
+def test_adaptador_oab_e_pendencia_sao_auditados_sem_repeticao(tmp_path):
+    from guicredito.pessoas.oab import CadastroOAB, CaptchaOAB, URL_CADASTRO
+
+    e = entrada()
+    chamadas = []
+    for caso in e.casos:
+        caso["alvos"][0].update(papel="advogado", lado="desconhecido")
+    def consulta(alvo):
+        chamadas.append(alvo["id"])
+        if alvo["id"] == "a1":
+            raise CaptchaOAB
+        return [{"nome": alvo["nome"], "oab": "234", "uf": "SP", "url": URL_CADASTRO, "data": "2026-11-23",
+                 "dados_profissionais": "escritório fictício"}]
+
+    pasta = tmp_path / "lote"
+    for _ in range(2):
+        dados = fluxo.pesquisar(e, config(tmp_path), {"oab": CadastroOAB(consulta)}, pasta)
+    assert chamadas == ["a1", "a2"]
+    a, b = dados["casos"]
+    assert a["oab"][0]["motivo"] == "captcha" and b["oab"][0]["estado"] == "consultado"
+    assert {r["fonte"]: r["estado"] for r in a["consultas"]}["OAB"] == "nao_verificado"
+    assert {r["fonte"]: r["estado"] for r in b["consultas"]}["OAB"] == "consultado"
+    assert not a["candidatos"] and b["candidatos"][0]["verificacao"] == "nao_verificado"
+    assert b["evidencias"][0]["candidato_id"] == b["candidatos"][0]["id"]
+
+
+def test_oab_indisponivel_persiste_falha_antes_do_proximo_alvo(tmp_path):
+    from guicredito.pessoas.oab import CadastroOAB
+
+    e = entrada()
+    for caso in e.casos:
+        caso["alvos"][0].update(papel="advogado", lado="desconhecido")
+    vistos = []
+    def falhar(alvo):
+        vistos.append(alvo["id"])
+        raise RuntimeError("sentinela privada")
+    pasta = tmp_path / "lote"
+    with pytest.raises(ValueError, match="OAB indisponível"):
+        fluxo.pesquisar(e, config(tmp_path), {"oab": CadastroOAB(falhar)}, pasta)
+    assert vistos == ["a1"]
+    consultas = json.loads((pasta / cnj(1) / "consultas.json").read_text())
+    assert any(r["fonte"] == "OAB" and r["estado"] == "interrompido" for r in consultas)

@@ -66,10 +66,10 @@ def linhas_do_caso(lote, caso):
         alvo = alvos[c["alvo_id"]]
         evidencias = por_candidato[cid]
         yield "Candidatos", cid, (lote, alvo["id"], cid, processo, alvo.get("papel"), alvo.get("tipo"),
-                                  c.get("nome"), c.get("confianca"), c.get("cidade") or alvo.get("cidade"),
+                                  c.get("nome"), c.get("confianca"), c.get("cidade"),
                                   c.get("empregador"), c.get("faixa_etaria"), [e["id"] for e in evidencias],
                                   [e["url"] for e in evidencias if e.get("url")], c.get("verificacao"))
-        if c.get("empresa"):
+        if c.get("empresa") and alvo.get("tipo") == "PF":
             vinculo = "vinculo-" + cid
             registros = [e["id"] for e in evidencias if e.get("categoria") in CATEGORIAS_SOCIETARIAS]
             yield "Vínculos", vinculo, (caso["rotulo"], cid, vinculo, c["empresa"], registros, c.get("capital_social"))
