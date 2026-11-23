@@ -239,3 +239,39 @@ def test_nome_empresarial_com_digito_sem_enviar_documentos():
     hermes = Hermes([], {})
     pesquisar_web(ALVO | {"nome":"3 EXEMPLO S.A.", "tipo":"PJ", "papel":"credor"}, hermes, Paginas({}))
     assert '3 EXEMPLO S.A.' in hermes.pesquisas[0]
+
+
+def test_reabrir_lote_apos_erro_de_leitura_preserva_recorte_sem_reenviar(tmp_path):
+    import json
+    from guicredito.pessoas.entrada import Entrada
+    from guicredito.pessoas.fluxo import pesquisar
+    from guicredito.pessoas.hermes import ErroProtocolo
+
+    class Leitor(Hermes):
+        def verificar(self):
+            return []
+
+        def propor(self, texto, alvo):
+            if alvo["url"] == URL:
+                return [achado()]
+            raise ErroProtocolo()
+
+    numero = "00000017420268260001"
+    alvo = dict(id="alvo-a", processo=numero, papel="devedor", tipo="PF", lado="devedor", nome=NOME)
+    caso = dict(processo=numero, posicao_original=1, pontuacao_original=60, alvos=[alvo])
+    entrada = Entrada([caso], [alvo], {}, {"planilha":"hash-fixture"}, [])
+    cfg = carregar_config(tmp_path / "inexistente", {"PESSOAS_BUSCA":"hermes", "PESSOAS_HERMES_KEY":"teste",
+                                                      "PESSOAS_HERMES_MODELO":"hermes-agent"})
+    segunda = URL + "/outra"
+    leitor = Leitor([ResultadoBusca(url, NOME, "") for url in (URL, segunda)], {})
+    http = Paginas({url: Pagina(url, NOME, "consultado", data=DATA) for url in (URL, segunda)})
+    lote = tmp_path / "lote"
+    for _ in range(2):
+        with pytest.raises(ValueError):
+            pesquisar(entrada, cfg, {"hermes": leitor, "http": http}, lote)
+        consultas = json.loads((lote / numero / "consultas.json").read_text())
+        assert any(q.get("id_chamada") == "call_teste" and q.get("id_resposta") == "resp_teste" for q in consultas)
+        assert any(q["estado"] == "incerto" for q in consultas)
+        ev, = json.loads((lote / numero / "evidencias.json").read_text())
+        assert ev["data"] == DATA and (lote / numero / ev["arquivo"]).read_text() == "João Exemplo"
+    assert len(leitor.pesquisas) == 1 and http.chamadas == [URL, segunda]
