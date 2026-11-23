@@ -181,10 +181,20 @@ class Pagina:
     data: str = ""
 
 
+def rede_social(host):
+    host = (host or "").lower().rstrip(".")
+    for rede in ("instagram.com", "facebook.com", "linkedin.com"):
+        if host == rede or host.endswith("." + rede):
+            return rede
+    return None
+
+
 class _TextoHTML(HTMLParser):
     def __init__(self):
         super().__init__()
         self.partes = []
+        self.titulos = []
+        self.em_titulo = False
         self.ignorar = 0
         self.barreira = False
 
@@ -192,16 +202,24 @@ class _TextoHTML(HTMLParser):
         if tag in ("style", "script", "noscript", "svg", "head"):
             self.ignorar += 1
         atributos = dict(attrs)
+        if tag == "title":
+            self.em_titulo = True
+        if tag == "meta" and atributos.get("property") == "og:title" and atributos.get("content"):
+            self.titulos.append(atributos["content"])
         if tag == "input" and (atributos.get("type") or "").lower() == "password":
             self.barreira = True
         if any("captcha" in (atributos.get(k) or "").lower() for k in ("class", "id", "src")):
             self.barreira = True
 
     def handle_endtag(self, tag):
+        if tag == "title":
+            self.em_titulo = False
         if tag in ("style", "script", "noscript", "svg", "head") and self.ignorar:
             self.ignorar -= 1
 
     def handle_data(self, data):
+        if self.em_titulo:
+            self.titulos.append(data)
         if not self.ignorar:
             self.partes.append(data)
 
@@ -237,6 +255,10 @@ class TransportePublico:
             if parser.barreira or re.search(r"\b(log in to (see|continue)|entrar para (ver|continuar)|"
                                            r"verify you are human|confirme que você é humano)\b", texto, re.I):
                 raise _FalhaHTTP("login ou captcha")
+            if rede_social(destino[0].hostname):
+                # A página de perfil pode embutir posts e conexões no corpo.
+                # Somente títulos de perfil seguem para leitura ou cache.
+                texto = " ".join(dict.fromkeys(parser.titulos)).strip()
             if not texto:
                 raise _FalhaHTTP("página sem texto")
             pagina = Pagina(url, texto, "consultado", data=data)

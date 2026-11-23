@@ -124,3 +124,12 @@ def test_pacing_entre_paginas_e_timeout_sem_retry():
     assert tx.baixar("http://example.test/1").texto == "Nome"
     assert tx.baixar("http://example.test/2").estado == "nao_consultado"
     assert pausas == [5] and len(tentativas) == 2
+
+
+def test_perfil_social_disponivel_minimiza_html_antes_da_leitura():
+    corpo = (b'<head><meta property="og:title" content="JOAO EXEMPLO - LinkedIn"></head>'
+             b'<main>Post sobre familia e fotos privadas</main>')
+    tx = TransportePublico(resolver=resolvedor("8.8.8.8"),
+                           conectar=lambda *_: Conexao("8.8.8.8", http(corpo)))
+    pagina = tx.baixar("http://www.linkedin.com/in/joaoexemplo")
+    assert pagina.texto == "JOAO EXEMPLO - LinkedIn"

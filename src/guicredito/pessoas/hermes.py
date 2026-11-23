@@ -1,6 +1,7 @@
 """Cliente do gateway local. A autorização é responsabilidade do despachante."""
 import json
 import re
+from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -138,20 +139,38 @@ def recortar(texto: str, nome: str, contexto: int, instrucoes: str) -> str:
     termo = normalizar(nome)
     if not termo or orcamento < len(nome.encode()) + 32:
         raise ErroProtocolo("Orçamento de contexto insuficiente")
-    bruto = texto.encode()
-    if len(bruto) <= orcamento:
-        return texto
-    # Localizar no texto original, mesmo se a acentuação ou o espaço divergirem.
-    palavras = list(re.finditer(r"\S+", texto))
-    partes = [normalizar(m[0]) for m in palavras]
-    normalizado = " ".join(partes)
-    pos = normalizado.find(termo)
-    if pos < 0:
-        return ""
-    inicio_palavra = normalizado.count(" ", 0, pos)
-    inicio = len(texto[:palavras[inicio_palavra].start()].encode())
-    inicio = max(0, min(len(bruto) - orcamento, inicio - (orcamento - len(nome.encode())) // 2))
-    return bruto[inicio:inicio + orcamento].decode("utf-8", errors="ignore")
+    tokens = re.compile(r"[\w\u0300-\u036f]+|[^\w\s\u0300-\u036f]+")
+    palavras = tokens.findall(termo)
+    ultimos = deque(maxlen=len(palavras))
+    excertos = []
+    ultimo_fim = 0
+    for palavra in tokens.finditer(texto):
+        ultimos.append(palavra.start())
+        if len(ultimos) != len(palavras) or normalizar(palavra[0]) != palavras[-1]:
+            continue
+        ini, fim = ultimos[0], palavra.end()
+        if normalizar(texto[ini:fim]) != termo:
+            continue
+        esquerda = max(0, ini - 400, ultimo_fim)
+        direita = min(len(texto), fim + 400)
+        if direita <= esquerda:
+            continue
+        parte = texto[esquerda:direita].encode()
+        separador = "\n…\n" if excertos and esquerda > ultimo_fim else ""
+        disponivel = orcamento - len(separador.encode())
+        if len(parte) > disponivel:
+            tamanho_nome = len(texto[ini:fim].encode())
+            if disponivel < tamanho_nome:
+                break
+            pos_nome = len(texto[esquerda:ini].encode())
+            pos = max(0, min(len(parte) - disponivel, pos_nome - (disponivel - tamanho_nome) // 2))
+            parte = parte[pos:pos + disponivel]
+        excertos.append(separador + parte.decode("utf-8", errors="ignore"))
+        orcamento = disponivel - len(parte)
+        ultimo_fim = direita
+        if orcamento <= 0:
+            break
+    return "".join(excertos)
 
 
 def _achados(resp):
@@ -233,6 +252,8 @@ class ClienteHermes:
             texto = recorte
             orcamento = len(recorte.encode()) * 3 // 4 + len(instr.encode()) + 1024
             recorte = recortar(texto, ref["nome"], orcamento * 4 // 3, instr)
+        if not recorte:
+            return []
         resp = self._pedido("leitura", {}, entrada(recorte), _LEITURA)
         return _achados(resp)
 

@@ -191,3 +191,13 @@ def test_gateway_instalado_bloqueia_antes_do_envio(tmp_path, monkeypatch):
                  lambda: cliente.propor("João Exemplo", ALVO)]:
         with pytest.raises(PoliticaIndisponivel, match="gratuita"):
             acao()
+
+
+def test_recorte_envia_somente_janelas_relevantes_quando_contexto_e_amplo():
+    texto = ("INICIO_FORA_DA_EVIDENCIA " + "palavra " * 500 + "João Exemplo trabalha na Primeira. "
+             + "outra " * 500 + "LONGE_DOS_NOMES " + "outra " * 500 + "JOAO   EXEMPLO trabalha na Segunda. "
+             + "palavra " * 500 + " FIM_FORA_DA_EVIDENCIA")
+    recorte = recortar(texto, "João Exemplo", 262144, "")
+    assert "Primeira" in recorte and "Segunda" in recorte
+    assert all(x not in recorte for x in ("INICIO_FORA", "LONGE_DOS", "FIM_FORA"))
+    assert recortar("Texto que só cita terceiros.", "João Exemplo", 262144, "") == ""
