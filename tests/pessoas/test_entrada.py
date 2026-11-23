@@ -103,3 +103,22 @@ def test_entrada_incompativel(entradas, erro):
     arquivo.write_text(json.dumps(resultado))
     with pytest.raises(ValueError):
         ler_entrada(*entradas)
+
+
+def test_cabecalho_preserva_nome_original_e_exige_limite_entre_partes_e_texto():
+    from guicredito.pessoas.entrada import extrair_alvos
+    publicacoes = [
+        "EXECUTADO: João Exemplo foi até a casa de Terceiro Exemplo.",
+        "Exequente: Banco Exemplo S.A. EXECUTADO: João Exemplo DESPACHO: Ouça-se Terceiro Exemplo.",
+        "EXECUTADO: JOÃO EXEMPLO; Terceiro mencionado na petição.",
+    ]
+    alvos = extrair_alvos([], publicacoes, {"processo": "ficcao"})
+    assert {a["nome"] for a in alvos} == {"Banco Exemplo S.A.", "João Exemplo"}
+
+
+def test_celula_com_documentos_e_advogado_qualificado():
+    from guicredito.pessoas.entrada import extrair_alvos
+    partes = [["Exeqte.", "BANCO EXEMPLO S.A. CNPJ: 00.000.001/0001-36 Advogado do exequente: ANA EXEMPLO"]]
+    alvos = extrair_alvos(partes, [], {"processo": "ficcao"})
+    assert [(a["nome"], a["papel"]) for a in alvos] == [("BANCO EXEMPLO S.A.", "credor"), ("ANA EXEMPLO", "advogado")]
+    assert alvos[0]["cnpj"] == "00000001000136"

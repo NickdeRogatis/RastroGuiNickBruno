@@ -44,7 +44,7 @@ def papel_da_parte(rotulo):
     return None
 
 
-_ADV = re.compile(r"\b(?:advogad[oa]s?|adv(?:s)?\.?)\s*:", re.I)
+_ADV = re.compile(r"\b(?:advogad[oa]s?|adv(?:s)?\.?)(?:\s+d[oa]s?\s+\w+)?\s*:", re.I)
 _DOC = re.compile(r"(?:,?\s*\(?\b(?:CNPJ|CPF)\b\s*[:.]?\s*[\d.*/-]+\)?)", re.I)
 _CNPJ = re.compile(r"\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b", re.I)
 
@@ -71,9 +71,13 @@ def _cabecalhos(texto):
         for trecho in re.split(r";|(?<=\.)\s+(?=[A-ZÁ-Ú][a-zá-ú])", linha):
             if not re.match(r"^\s*(?:EXEQUENTES?|EXECUTAD[OA]S?|REQUERENTES?|REQUERID[OA]S?|AUTORES?|AUTOR|R[EÉ]US?)\s*:", trecho, re.I):
                 continue
-            credores, devedores = partes_do_cabecalho(trecho.upper())
+            trecho = re.sub(r"\b[\w()]+(?=\s*:)", lambda m: m[0].upper(), trecho)
+            credores, devedores = partes_do_cabecalho(trecho)
             for papel, nomes in (("credor", credores), ("devedor", devedores)):
                 for nome in nomes:
+                    if any(p[0].islower() and normalizar(p) not in {"de", "da", "do", "dos", "das", "e"}
+                           for p in nome.split()):
+                        continue
                     yield papel, nome
 
 
@@ -106,7 +110,10 @@ def extrair_alvos(partes, publicacoes, caso):
     for publicacao in publicacoes:
         for papel, nome in _cabecalhos(publicacao):
             incluir(papel, nome, "Publicações")
-    return list(alvos.values())
+    from .oab import extrair_advogados
+
+    advogados = extrair_advogados(partes, publicacoes, processo, caso.get("cidade") or "")
+    return [*alvos.values(), *advogados]
 
 
 def _capa(pasta, caso, hashes):
