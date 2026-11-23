@@ -5,7 +5,7 @@
 - **Base:** designs de 08/11 (§§1–7) e 22/11 (§§1 e 3), ExecucoesSP_FontesEPlano.html (§§2, 7 e 8), código e testes de aprofundamento.
 - **Escopo desta entrega:** somente este documento e o plano; nenhuma consulta real ou alteração de produto.
 
-Convenção: **decisão do Nick** registra o que ele decidiu; *(escolha minha)* registra decisões de refinamento e propostas de implementação para conferência. As notas de viabilidade são inferências da documentação local, não verificações atuais de sites. Nenhum dado de dados/ ou saida/ foi lido.
+Convenção: **decisão do Nick** registra o que ele decidiu; *(escolha minha)* registra decisões de refinamento e propostas de implementação para conferência. As notas sobre registros e fornecedores usam a documentação local. O ensaio impessoal anterior do Hermes no Studio fornece os resultados operacionais da seção 11. Nenhum dado de dados/ ou saida/ foi lido.
 
 ## 1. Intenção e porquê
 
@@ -25,7 +25,7 @@ Critério de aceite *(escolha minha)*: lote fictício com dois casos percorre as
 
 ## 3. Não-objetivos
 
-Não alterar DJEN, aprofundamento, score, ranking ou arquivos existentes. Não implementar cessão, negociação, cobrança, agendamento, avaliação patrimonial completa, salário estimado, saldo da dívida ou garantias de solvência. Não criar cliente Hermes. Não implementar uma busca exaustiva de processos ou acesso a autos restritos.
+Não alterar DJEN, aprofundamento, score, ranking ou arquivos existentes. Não implementar cessão, negociação, cobrança, agendamento, avaliação patrimonial completa, salário estimado, saldo da dívida ou garantias de solvência. Não implementar uma busca exaustiva de processos ou acesso a autos restritos.
 
 O programa nunca envia mensagens, e-mails, chamadas, pedidos de amizade ou qualquer contato (**decisão do Nick**). A decisão de contato fica com Nick.
 
@@ -44,7 +44,7 @@ Capital social não equivale a patrimônio pessoal disponível; emprego não pro
 | Regra anterior | Substituição nesta etapa |
 |---|---|
 | 08/11 §4: não virar lista de abordagem; sem contatos, telefone ou e-mail | Coletar contatos de devedor, credor e advogados antes da compra; nenhuma abordagem automática (**decisão do Nick**). |
-| 08/11 §4: nomes nunca enviados a serviços externos | Nomes podem ir à busca, sites públicos e registros; nome ou CPF ao provedor. Modelo somente nas máquinas do Nick (**decisão do Nick**). |
+| 08/11 §4: nomes nunca enviados a serviços externos | A consulta nominal mínima pode sair do Hermes para o buscador gratuito. Sites públicos e registros recebem os dados necessários à consulta. Só o provedor de contatos recebe CPF, quando informado para uma identidade confirmada. A inferência fica no Studio (**decisão do Nick**). |
 | 08/11 §§4–5: não raspar tribunal; DJEN fonte única | Aprofundamento já acrescentou e-SAJ; pessoas acrescenta páginas públicas e registros. Isso não autoriza burlar bloqueios nem afirma permissão jurídica de raspagem (**decisão do Nick**). |
 | 22/11 §3: provedores fora; consulta só nos 2–3 casos comprados | Provedor pago de contatos para pessoas confirmadas dos casos selecionados, antes da compra (**decisão do Nick**). |
 | 08/11 §1: falar com devedor só depois de virar credor | O sistema passa a possuir contatos antes da compra. Mudança na ordem do contato humano não foi decidida: pendência para Nick (**decisão do Nick** quanto à coleta). |
@@ -58,7 +58,7 @@ Alternativas consideradas:
 - Subcomandos no aprofundamento: misturam contatos em uma etapa documentada como dados processuais públicos, exigindo reescrever testes e READING.
 - Repositório separado: separação de dados mais forte, mas duplica CNJ, seleção e manutenção.
 
-*(escolha minha — A1)*: dividir responsabilidades em `modelos.py`, `entrada.py`, `identidade.py`, `config.py`, `http.py`, `modelo.py`, `fontes.py`, `cnpj.py`, `oab.py`, `evidencias.py`, `planilha.py`, `relatorio.py`, `fluxo.py` e `__main__.py`. Usar dataclasses/Protocol, urllib, sqlite3 e demais módulos padrão; openpyxl e certifi já estão instalados. Nenhuma dependência nova.
+*(escolha minha — A1)*: dividir responsabilidades em `modelos.py`, `entrada.py`, `identidade.py`, `config.py`, `http.py`, `hermes.py`, `fontes.py`, `cnpj.py`, `oab.py`, `evidencias.py`, `planilha.py`, `relatorio.py`, `fluxo.py` e `__main__.py`. Usar dataclasses/Protocol, urllib, sqlite3 e demais módulos padrão; openpyxl e certifi já estão instalados. Nenhuma dependência nova.
 
 Reutilizar somente utilitários públicos e puros: normalização textual do DJEN, classificação de empresa/cabeçalho e validação CNJ/seleção do aprofundamento; não chamar sua coleta nem seu gravador de lote. A regra de três palavras em `_nomes_para_cruzar` pertence ao score. Não importar essa função privada: JOÃO EXEMPLO, nome de duas palavras, deve poder aparecer como candidato sem confirmação automática *(escolha minha — A2)*.
 
@@ -83,10 +83,10 @@ IDs persistentes independem da ordem das linhas. Não fundir automaticamente dua
 1. Validar entradas; extrair alvos das partes, complementando com texto do Excel. Todo PF no polo devedor entra: executado, réu, avalista, fiador, coobrigado *(escolha minha)*. PJ devedora recebe só seu cadastro, situação e capital; seus sócios não viram alvos. Credor PJ não autoriza buscar seus donos.
 2. Parser próprio de advogados em pessoas interpreta nomes, OAB e vínculo com a parte; sem vínculo comprovável, mostrar “lado desconhecido” *(escolha minha)*. Não pesquisar testemunhas ou nomes meramente citados.
 3. CNPJ local e cadastro OAB oferecem candidatos e evidências. Contatos gratuitos de credor/advogado ficam separados de contatos pagos *(escolha minha)*.
-4. Serviço de busca ainda não escolhido (**decisão do Nick**). Interface `buscar(consulta) -> resultados(url, titulo, snippet)`, com fake. Sem configuração: “busca não configurada”, pular pesquisa web; registros continuam.
-5. Código pesquisa emprego/empregador, perfis públicos e outros processos; baixa páginas. Modelo não navega, não escolhe ferramentas nem dispara requisições *(escolha minha)*.
-6. Cada link LinkedIn/Instagram/Facebook recebe UMA tentativa simples: sem login, cookies/sessão, resolver captcha, seguir links internos ou retries. Parede de login, bloqueio ou erro: guardar título, snippet e URL do resultado, “não verificado — conferir no navegador”, continuar (**decisão do Nick**). Sem snippet útil, apenas link sem achado.
-7. Modelo propõe candidatos a partir do texto recebido. Rejeitar URL ausente dos resultados de busca do lote e trecho que não ocorra na página baixada, comparando com `normalizar`; somente para download indisponível aceitar trecho do snippet. Snippet é sempre não verificado *(escolha minha)*. Registros estruturados seguem validadores próprios; não são obrigados a aparecer no buscador.
+4. O agente Hermes executa a busca (**decisão do Nick**, revisão de 23/11). O Python monta a consulta a partir de um único alvo autorizado e do objetivo correspondente ao seu papel. Exemplos de objetivos são localizar página profissional do devedor, referência pública a outro processo, site institucional do credor ou página profissional do advogado. Uma consulta recebe somente nome e, quando necessário, cidade ou termo profissional. CPF, endereço residencial, telefone, contatos, arquivos e texto integral do processo ficam fora desse pedido.
+5. O adapter implementa `buscar(consulta) -> resultados(url, titulo, snippet)` sobre a API do agente (§11). Só admite resultados da saída efetiva de `web_search`. O cliente mantém a interface substituível por um dublê nos testes. Com a busca desligada, registra “busca não configurada” e prossegue com os registros. Uma busca ligada que falha tem outro tratamento (§12).
+6. O Python abre uma vez cada URL pública relevante devolvida pela busca e reaproveita sua evidência no lote *(escolha minha — A17)*. Em LinkedIn, Instagram e Facebook faz um único GET direto, sem login, cookies, sessão, redirecionamento, navegação interna ou repetição. Se houver barreira, captcha ou erro, conservar título, snippet e URL, marcar “não verificado — conferir no navegador” e seguir. Sem snippet útil, registrar só o link (**decisão do Nick**). Essa divisão permite contar e auditar as tentativas. Ainda que disponível no Studio, `web_extract` fica fora da pesquisa nominal nesta versão.
+7. Em uma chamada independente de leitura, o Qwen via Hermes recebe apenas o recorte relevante e a referência da fonte, com ferramentas desabilitadas no servidor. Propõe candidatos a partir desse texto. Rejeitar URL ausente dos resultados de busca do lote e trecho que não ocorra na página baixada, comparando com `normalizar`; somente para download indisponível aceitar trecho do snippet. Snippet é sempre não verificado *(escolha minha)*. Registros estruturados seguem validadores próprios; não são obrigados a aparecer no buscador.
 8. Salvar evidências aceitas com data/hash e produzir relatório/Excel; nada conta como identidade confirmada antes da marca humana.
 
 *(escolha minha — A5)*: confiança baixa para nome isolado; média para nome mais um indício independente compatível (cidade, empregador, endereço do processo ou faixa etária); alta para dois indícios independentes compatíveis, sem conflitos. Conflitos explícitos reduzem a baixa. Exibir todos os candidatos retornados pelas consultas executadas, inclusive baixa confiança e sem limite silencioso. Registrar paginação/limite do serviço; não prometer todos os homônimos existentes.
@@ -122,26 +122,43 @@ HTML escapa todo texto e atributos, aceita hyperlinks apenas HTTP(S), não incor
 
 ## 11. Conexão com o Mac Studio
 
-Laptop do Nick (24 GB) executa pessoas; Mac Studio (64 GB) serve **Qwen3.6-35B-A3B-UD-Q4_K_M**. Cliente chama diretamente servidor OpenAI-compatible, o mesmo usado por Hermes: `/v1/models`, `/v1/chat/completions`. Não passa por Hermes (**decisão do Nick**).
+**Decisão do Nick, revisada em 23/11/2026.** O Python pode rodar no Studio, onde o projeto está aberto, ou no laptop. Em ambos os casos, ele chama o **gateway do agente Hermes**. O Studio executa o Qwen e administra as ferramentas. A aplicação não escolhe nem contrata o motor de busca a cada requisição.
 
-*(escolha minha)*: configuração local .env:
-- `PESSOAS_MODELO_URL`: base terminando /v1; exemplo http://<mac-studio>.local:<porta>/v1. Portas exemplificativas dependem do servidor (LM Studio 1234, Ollama 11434, llama.cpp 8080), não são autodetectadas.
-- `PESSOAS_MODELO_NOME`: ID exato listado pelo servidor.
-- `PESSOAS_MODELO_TIMEOUT`: segundos.
-- `PESSOAS_MODELO_CONTEXTO`: janela configurada no servidor.
-- slots de busca/provedor, URLs e chaves quando escolhidos.
+| Configuração observada no ensaio impessoal anterior | Valor |
+|---|---|
+| Hermes | `v0.21.7+500.g8f81791`, um gateway de usuário |
+| Base da aplicação e ID anunciado por `GET /v1/models` | `http://127.0.0.1:8642/v1`, `hermes-agent` |
+| Inferência interna do Hermes | llama.cpp autenticado em `127.0.0.1:18434`, `Qwen3.6-35B-A3B-UD-Q4_K_M`, contexto de 262144 tokens |
+| Autenticação e texto | Sem Bearer ou com chave incorreta, HTTP 401. Com chave válida, modelos e texto retornaram HTTP 200. |
+| Ferramentas em pergunta impessoal | Em `POST /v1/responses`, o Hermes executou `web_search` via Parallel e `web_extract` via Firecrawl, sem chaves desses fornecedores. Três entradas apontaram para a mesma página da IANA. |
 
-*(escolha minha — A12)*: timeout padrão 180 s; contexto obrigatório, sem adivinhar capacidade. Reservar 25% para saída, contar conservadoramente UTF-8 bytes como limite superior de tokens do texto, incluindo instruções e metadados; truncar em janelas ao redor do nome. Se instruções/reserva excedem janela, falhar configuração. Validar depois com tokenizer do servidor se disponível sem dependência nova; teste deve provar limite e retenção de trecho do nome. Não enviar página inteira quando excede limite.
+O gateway escuta em loopback. No próprio Studio basta a base acima. No laptop usa-se a mesma base após abrir o túnel abaixo. O SSH do Studio respondeu em `192.168.15.10:22`; a autenticação e o encaminhamento a partir do laptop ainda precisam de validação. O cliente reaproveita o gateway instalado.
 
-*(escolha minha)*: `verificar` chama somente /v1/models, valida modelo configurado e informa se busca/provedor estão configurados, sem pessoas nem chamadas aos provedores. Nome ausente ou não listado é erro explícito. Servidor inacessível interrompe lote com URL sanitizada, nunca “nada encontrado”. Busca não configurada pode ser pulada com registros funcionando; modelo indisponível ao ser necessário interrompe lote preservando o já coletado.
+```sh
+ssh -NT -o ExitOnForwardFailure=yes -L 127.0.0.1:8642:127.0.0.1:8642 nickderogatis@Nicks-Mac-Studio.local
+```
 
-*(escolha minha — A13)*: aceitar localhost, *.local ou IP privado; validar resolução DNS de *.local/localhost para loopback ou faixas privadas RFC1918/IPv6 ULA, não apenas `is_private` genérico. Recusar URL com usuário/senha, query, fragmento e host público; desabilitar redirects do modelo; validar endereço efetivo antes da conexão para impedir mudança DNS para IP público. Nenhum fallback para modelo na nuvem. Nomes podem sair para busca/registros/provedor, mas nunca para modelo externo.
+**Configuração da aplicação** *(escolha minha — A12 a A14)*. `PESSOAS_BUSCA=hermes` habilita a web. Ausente ou vazia, pula somente a web; outro valor é erro. `PESSOAS_HERMES_URL` e `PESSOAS_HERMES_MODELO` usam a base e o ID da tabela. `PESSOAS_HERMES_TIMEOUT` tem padrão de 180 s. `PESSOAS_HERMES_CONTEXTO` declara a janela efetiva, aqui 262144. `PESSOAS_HERMES_KEY` fornece a chave dedicada ao gateway por ambiente ou pelo arquivo local privado da aplicação. No Studio sua origem é o campo `API_SERVER_KEY` em `~/.hermes/.env`. O cliente transmite o valor apenas ao gateway, em cabeçalho Bearer. Os registros públicos e o fornecedor de contatos têm transportes próprios. O arquivo privado do Hermes não é arquivo de configuração geral do projeto.
 
-*(escolha minha — A14)*: .env lido por parser simples KEY=VALUE (sem shell, interpolação ou execução), ambiente explícito tem precedência. Primeira tarefa de implementação acrescenta .env a .gitignore antes de qualquer configuração. Segredos nunca em manifesto, relatório ou exceções. Configurações adicionais: intervalo padrão 5 s, mínimo 3 s; limite de página 5 MB; timeout web 25 s; caminho/versionamento do índice CNPJ. Configuração do provedor/busca é validada pelo respectivo adapter; ausente é diferente de malformada.
+A12. Reservar 25% para a resposta e recortar o texto em torno das ocorrências do nome. Orçar mensagens, instruções, metadados e margem para o contexto interno do agente; contar bytes UTF-8 como aproximação conservadora para o texto. Rejeitar orçamento insuficiente. Uma resposta truncada ou parcial não autoriza aceitar o fragmento como evidência.
+
+A13. Na configuração atual, aceitar somente loopback local ou o encaminhamento SSH, inclusive IPv6 loopback. Validar endereço literal ou todas as resoluções de `localhost`, conferir destino efetivo, desativar proxies de ambiente e redirects. Recusar endereço público, porta interna do llama.cpp, usuário/senha na URL, query e fragmento antes de enviar o Bearer. A aplicação não abre portas na LAN nem encaminha para modelos de nuvem.
+
+A14. Ler `.env` como pares KEY=VALUE sem executar shell nem interpolar variáveis; ambiente explícito tem precedência. Ignorá-lo no Git antes de configurar. Pausa pública padrão de 5 s, mínimo 3 s, limite de 5 MB e timeout de 25 s por página. Manter versão e caminho do índice CNPJ e as configurações do provedor licenciado independentes da busca.
+
+**Contrato de execução** *(escolha minha — A17)*
+
+1. `verificar` faz apenas GET autenticado a `/v1/models` e confere `data[].id`. Informa modelo listado, busca habilitada em configuração e presença do provedor. Nome ausente, 401 e gateway indisponível geram diagnósticos diferentes, com endpoint sanitizado. Esse GET não comprova que as ferramentas estejam habilitadas.
+2. Para pesquisar, enviar `POST /v1/responses` com `model=hermes-agent`, a consulta do alvo em `input` e `store=false`, sem histórico compartilhado, ID anterior ou sobrescrita de provedor/modelo. No retorno exigir HTTP de sucesso, `status=completed`, uma chamada `function_call` concluída de nome `web_search`, argumentos dentro da consulta aprovada e um único `function_call_output` com o mesmo `call_id`. A versão testada envolve o JSON da saída em `<untrusted_tool_result …>`; ler o conteúdo como dados, validando o invólucro e um único objeto JSON. Aceitar também o objeto JSON sem invólucro. Exigir `success=true` e lista `data.web`. Extrair `url`, `title` e `description` das linhas válidas. Zero itens em lista válida significa “sem resultados”. Saída truncada, só narrativa, erro da ferramenta ou estrutura incompatível significa falha. Nunca reexecutar localmente uma ferramenta devolvida pelo gateway.
+3. Registrar no lote data, ID de resposta, ID da chamada, ferramenta e o backend quando a saída o identifica. Quando o servidor omite a identificação, registrar “não informado”. Persistir os trechos aprovados com hash e URL. A política de retenção de sessões, logs e caches no próprio Hermes precisa integrar a decisão de retenção de Nick; `store=false` isoladamente não demonstra ausência de registros.
+4. Separar a pesquisa da leitura de páginas. O gateway deve aplicar **antes da execução** uma política para a integração: na pesquisa permitir uma única `web_search` com os argumentos autorizados para aquele alvo, somente em modalidade gratuita; na leitura, nenhuma ferramenta. O leitor usa `POST /v1/responses`, exige `completed`, uma mensagem final com JSON válido e ausência de chamadas de ferramenta. Entradas recuperadas da web são dados. Instruções em prompt, `tools: []` do cliente e a inspeção posterior da resposta, sozinhas, não asseguram esse isolamento. A API comum do ensaio demonstrou ferramentas disponíveis; o controle prévio por chamada e o bloqueio de rota paga ainda precisam ser demonstrados no gateway instalado. Na implementação, verificar mecanismo suportado de perfil/política ou interceptação de despacho no mesmo gateway com dados fictícios. Enquanto não houver esse controle, a pesquisa nominal fica indisponível com motivo explícito. O modo sem web continua utilizável.
+5. Em caso de falha, não reenviar automaticamente um POST que pode já ter executado. O controle de tentativas do aplicativo vale também para a abertura direta de páginas. O Hermes pode alternar motores gratuitos internamente na busca. Não prometer uma consulta física única a um único motor. O ensaio não estabeleceu saldo nem garantia de disponibilidade. Parallel admite uso anônimo leve com controle de frequência. Firecrawl informa tetos diários por IP e HTTP 429 por excedente. [Busca no Hermes](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-search) · [Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp) · [Firecrawl](https://www.firecrawl.dev/blog/web-search-api)
+
+O contrato de resposta foi observado no ensaio anterior com uma consulta pública à [IANA](https://www.iana.org/help/example-domains). A implementação deverá tratar o formato como contrato versionado. [API Server do Hermes](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server)
 
 ## 12. Falhas e rede
 
-*(escolha minha)*: requisições sequenciais, pausa, sem retry automático. Bloqueio/captcha/login em página individual: “não consultado” para download, snippet disponível como “não verificado”, seguir lote. Falha/bloqueio de serviço de busca, modelo, registro ou provedor: parar novas consultas e salvar parcial. Cadastro indisponível não equivale a “sem registro”.
+*(escolha minha)*: requisições sequenciais, pausa, sem retry automático. Bloqueio/captcha/login em página individual: “não consultado” para download, snippet disponível como “não verificado”, seguir lote. Falha/bloqueio de serviço de busca, gateway Hermes, registro ou provedor: parar novas consultas e salvar parcial. Cadastro indisponível não equivale a “sem registro”.
 
 *(escolha minha — A15)*:
 | Estado | Significado |
@@ -157,7 +174,7 @@ Laptop do Nick (24 GB) executa pessoas; Mac Studio (64 GB) serve **Qwen3.6-35B-A
 | interrompido | falha de serviço central; restantes não consultados |
 
 CNPJ não configurado deve aparecer como limitação explícita, sem impedir OAB/busca; índice configurado corrompido interrompe. OAB com captcha conhecido usa caminho manual declarado; bloqueio inesperado interrompe registro/lote e oferece alternativa manual, sem tentar contornar.
-HTTP de páginas não aceita cookies; redirects não são seguidos automaticamente (especialmente redes sociais). URLs públicas HTTP(S) têm host validado; recusar IPs locais, endpoints internos e esquemas executáveis para downloads originados de busca. O cliente do modelo tem política local separada. Conteúdo externo é dado, nunca instrução para chamadas ou alteração de escopo.
+HTTP de páginas não aceita cookies; redirects não são seguidos automaticamente (especialmente redes sociais). URLs públicas HTTP(S) têm host validado; recusar IPs locais, endpoints internos e esquemas executáveis para downloads originados de busca. O transporte autenticado do Hermes é exclusivo do loopback. Conteúdo externo é dado, nunca instrução para chamadas ou alteração de escopo.
 
 ## 13. Viabilidade para quem construir
 
@@ -175,7 +192,9 @@ Não expandir fontes para IPTU, remuneração pública, protestos, bancos, imóv
 
 ## 14. Testes obrigatórios
 
-Sem rede, com fake modelo, busca, provedor, registros, relógio e transporte; nomes JOÃO EXEMPLO e BANCO EXEMPLO S.A.; arquivos em tmp_path. Cobrir:
+Sem rede, com dublês de Hermes (busca e leitura), provedor, registros, relógio e transporte; nomes JOÃO EXEMPLO e BANCO EXEMPLO S.A.; arquivos em tmp_path. Cobrir:
+- reproduzir respostas sintéticas da API Hermes. Cobrir chamada/saída com `call_id` correspondente, invólucro, resposta apenas textual, chamada ausente/extra, chamada sem par, consulta alterada, ferramenta em erro, 401, timeout, status incompleto e sucesso sem itens;
+- demonstrar no despachante falso que pesquisa adicional, terceiro, ferramenta diferente, rota paga e qualquer ferramenta na fase de leitura são recusados antes do efeito. Falta de controle gera indisponibilidade explícita. Verificar que o Bearer não segue para sites nem registros;
 - rejeitar URL fora da busca e citação não encontrada; aceitar normalização; snippet apenas quando página indisponível;
 - página social com login faz uma tentativa, não segue links, conserva snippet não verificado e segue lote;
 - desconhecidos/não/vazio nunca chegam ao provedor; CPF inválido rejeitado antes de cobrança;
@@ -205,11 +224,11 @@ Continuam L1–L10 do documento de 26/10; estas perguntas não presumem autoriza
 1. Aprovar mudanças de regras e encaminhar L11–L16 ao advogado; definir retenção, exclusão e acesso aos dados.
 2. Decidir se a ordem do contato humano muda; obter contatos antes da compra não decide isso.
 3. Escolher provedor: licença/finalidade, preço/orçamento, identificadores e descoberta sem contatos ambíguos; CPF-only deixará casos pendentes.
-4. Escolher busca gratuita e confirmar qual serviço testado com Hermes pode preencher o slot, seus limites e credenciais.
-5. Informar URL LAN, ID exato do modelo, janela de contexto e autenticação eventualmente exigida pelo servidor Mac Studio.
+4. Na primeira rodada autorizada, confirmar que a cobertura e os limites da busca gratuita do Hermes atendem ao volume desejado. O mecanismo prévio de restrição da §11 é verificação técnica de quem implementar.
+5. Se optar por executar no laptop, validar de lá o túnel e o acesso autenticado. Para execução no Studio, a API local já foi testada.
 6. Escolher local/espaço e preparação do snapshot CNPJ; confirmar leiaute/volume e rotina de atualização antes do adapter real.
 7. Confirmar acesso simples ao cadastro OAB ou aceitar operação manual inicial.
-8. Conferir escolhas minhas A1–A16 e defaults marcados; fazer a primeira execução real pessoalmente, começando com dois casos, e revisar comportamento de páginas sociais.
+8. Conferir escolhas minhas A1–A17 e defaults marcados; fazer a primeira execução real pessoalmente, começando com dois casos, e revisar comportamento de páginas sociais.
 
 ## 17. O que fica com quem implementar
 
