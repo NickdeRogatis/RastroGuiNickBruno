@@ -1,5 +1,6 @@
 """Passagem opcional de contatos. O piloto não instala nenhum fornecedor."""
 import hashlib
+import inspect
 import json
 import re
 from datetime import datetime, timezone
@@ -56,81 +57,206 @@ def _momento():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _opcoes(raw, cid):
-    if not isinstance(raw, list):
-        raise ValueError
-    itens = []
-    ids = set()
-    for r in raw:
+def _chave(*partes):
+    dados = json.dumps(partes, ensure_ascii=False).encode()
+    return hashlib.sha256(dados).hexdigest()[:32]
+
+
+def _texto_minimo(valor, campo):
+    if not isinstance(valor, str) or not valor.strip() or len(valor) > 160:
+        raise ValueError("Campo de desambiguação inválido.")
+    valor = valor.strip()
+    if not all(c.isalnum() or c in " .,'’&/()-–" for c in valor):
+        raise ValueError("Campo de desambiguação inválido.")
+    if re.search(r"(?:[0-9][ .()/-]*){8}", valor):
+        raise ValueError("Identificador ou contato na projeção de descoberta.")
+    if campo == "faixa_etaria" and not re.fullmatch(
+        r"(?:[0-9]{1,3}(?:\s*(?:a|até|[-–])\s*[0-9]{1,3})?(?: anos)?|adulto|idoso)", valor, re.I
+    ):
+        raise ValueError("Faixa etária inválida.")
+    return valor
+
+
+def _opcoes(resposta, cid):
+    if not isinstance(resposta, list):
+        raise ValueError("Resposta de identificação inválida.")
+    itens, ids = [], set()
+    for r in resposta:
         externo = r["id"]
-        if not isinstance(externo, str) or not externo or externo in ids:
-            raise ValueError
+        if (not isinstance(externo, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", externo)
+                or re.fullmatch(r"(?:[0-9][_-]?){8,15}", externo)
+                or re.search(r"(?<![a-zA-Z0-9])[0-9]{8,15}(?![a-zA-Z0-9])", externo)
+                or re.fullmatch(r"(?:cpf|cnpj|tel|telefone|whatsapp)[_-]?[0-9-]+", externo, re.I)
+                or externo in ids):
+            raise ValueError("Identificador opaco inválido ou repetido.")
         ids.add(externo)
-        row_id = hashlib.sha256(json.dumps([cid, externo]).encode()).hexdigest()[:32]
-        itens.append({"id": row_id, "id_externo": externo, "candidato_id": cid, "nome": r["nome"],
-                      "indicios": {k: r[k] for k in ("cidade", "faixa_etaria") if isinstance(r.get(k), str)}})
+        indicios = {k: _texto_minimo(r[k], k) for k in ("cidade", "faixa_etaria") if r.get(k) is not None}
+        itens.append({"id": _chave(cid, externo), "id_externo": externo, "candidato_id": cid,
+                      "nome": _texto_minimo(r["nome"], "nome"), "indicios": indicios})
     return itens
 
 
-def _executar(pedido, gravar, chamada):
-    pedido.update(estado="incerto", requisicao=uuid4().hex, iniciado_em=_momento())
-    gravar()  # Registro durável antes de qualquer operação faturável.
+def _opcao(caso, cid, decisoes):
+    opcoes = [r for r in caso["provedor"] if r["candidato_id"] == cid]
+    marcas = decisoes.get("provedor", {})
+    if len(opcoes) == 1 and marcas.get(opcoes[0]["id"], {}).get("Confirmado") != "não":
+        return opcoes[0]
+    escolhidas = [r for r in opcoes if marcas.get(r["id"], {}).get("Confirmado") == "sim"]
+    if len(escolhidas) > 1:
+        raise ValueError("Confirme uma única opção do provedor por candidato.")
+    return escolhidas[0] if escolhidas else None
+
+
+def _assinatura(provedor, identidade):
+    return hashlib.sha256(json.dumps([provedor, identidade], sort_keys=True).encode()).hexdigest()
+
+
+def validar_escolhas(caso, decisoes):
+    """Preserva a identidade à qual um contato pertence, inclusive ao regenerar relatórios."""
+    candidatos = {c["id"]: c for c in caso.get("candidatos", [])}
+    alvos = {a["id"]: a for a in caso.get("alvos", [])}
+    for cid, pedido in caso.get("pedidos", {}).items():
+        if pedido.get("estado") == "encerrado":
+            continue
+        if pedido.get("tipo_identificador"):
+            c = candidatos[cid]
+            identidade = _identificador(alvos[c["alvo_id"]], c, decisoes["candidatos"].get(cid, {}),
+                                        {pedido["tipo_identificador"]})
+            if _assinatura(pedido["provedor"], identidade) != pedido["assinatura"]:
+                raise ValueError("Identidade ou fornecedor mudou. Revise o pedido anterior.")
+        vinculada = pedido.get("opcao_id")
+        if vinculada or pedido.get("estado") == "concluido":
+            selecao = _opcao(caso, cid, decisoes)
+            if vinculada is None:
+                # Um lote anterior só permite inferência quando a descoberta teve uma única opção.
+                antigas = [r for r in caso["provedor"] if r["candidato_id"] == cid]
+                vinculada = antigas[0]["id"] if len(antigas) == 1 else None
+            if not selecao or selecao["id"] != vinculada:
+                raise ValueError("A opção confirmada diverge do contato solicitado.")
+
+
+def _autorizado(marca):
+    return marca.get("Confirmado") == "sim" and marca.get("Autorizar consulta paga") == "sim"
+
+
+def _exigir_contrato(provedor):
+    nome = getattr(provedor, "nome", None)
+    identificadores = getattr(provedor, "identificadores", None)
+    if (not isinstance(nome, str) or not nome.strip()
+            or not isinstance(identificadores, (set, frozenset, list, tuple))
+            or not all(i in ("cpf", "cnpj", "nome") for i in identificadores)):
+        raise ProvedorIncompativel("Identificação ou capacidades do provedor inválidas.")
+    if getattr(provedor, "descoberta_separada", False) is not True:
+        raise ProvedorIncompativel("Provedor sem descoberta separada de contatos.")
     try:
-        return chamada()
+        for nome in ("identificar", "obter_contatos"):
+            inspect.signature(getattr(provedor, nome)).bind("identidade", requisicao="chave")
+    except (ValueError, TypeError, AttributeError):
+        raise ProvedorIncompativel("Provedor sem suporte à identificação das requisições.") from None
+
+
+def _iniciar(pedido, etapa, gravar):
+    chaves = pedido.setdefault("chaves_requisicao", {})
+    if etapa not in chaves:
+        chaves[etapa] = uuid4().hex
+    pedido.update(estado="incerto", etapa=etapa, requisicao=chaves[etapa], iniciado_em=_momento())
+    gravar()
+    return pedido["requisicao"]
+
+
+def _registrar_resposta(caso, cid, pedido, resposta):
+    if pedido["etapa"] == "identificar":
+        opcoes = _opcoes(resposta, cid)
+        caso["provedor"].extend(opcoes)
+        pedido["estado"] = "identificado" if opcoes else "sem_resultados"
+        return
+    if pedido["etapa"] != "obter_contatos" or not isinstance(resposta, list):
+        raise ValueError("Resposta de contatos inválida.")
+    contatos = {}
+    for item in resposta:
+        tipo, valor = item["tipo"], item["valor"]
+        if tipo not in {"telefone", "WhatsApp", "e-mail", "endereço"} or not isinstance(valor, str) or not valor.strip():
+            raise ValueError("Contato recebido inválido.")
+        data_fonte = item.get("data_fonte") or ""
+        if not isinstance(data_fonte, str):
+            raise ValueError("Data do contato inválida.")
+        chave = _chave(cid, pedido["opcao_id"], tipo, valor.strip())
+        contatos[chave] = dict(id=chave, candidato_id=cid, origem=pedido["provedor"],
+                               opcao_id=pedido["opcao_id"], id_externo=pedido["id_externo"],
+                               requisicao=pedido["requisicao"], tipo=tipo, valor=valor.strip(),
+                               data_fonte=data_fonte, data_consulta=pedido["iniciado_em"])
+    caso["contatos"].extend(contatos.values())
+    pedido.update(estado="concluido", concluido_em=_momento())
+
+
+def _executar(caso, cid, pedido, etapa, operacao, argumento, gravar):
+    requisicao = _iniciar(pedido, etapa, gravar)
+    try:
+        resposta = operacao(argumento, requisicao=requisicao)
+        _registrar_resposta(caso, cid, pedido, resposta)
     except Exception:
         raise ValueError("Resultado pago incerto. Conciliar com o fornecedor antes de repetir.") from None
+    gravar()
+
+
+def conciliar_pedido(caso, decisoes, requisicao, resultado, resposta=None):
+    """Registra o resultado verificado com o fornecedor sem disparar nova operação."""
+    encontrados = [(cid, p) for cid, p in caso.get("pedidos", {}).items()
+                   if p.get("requisicao") == requisicao and p.get("estado") == "incerto"]
+    if len(encontrados) != 1:
+        raise ValueError("Requisição incerta não encontrada.")
+    cid, pedido = encontrados[0]
+    if resultado == "encerrar" and resposta is None:
+        pedido["estado"] = "encerrado"
+    elif pedido.get("etapa") not in {"identificar", "obter_contatos"}:
+        raise ValueError("Pedido anterior sem identificação da operação. Confira o registro do fornecedor.")
+    elif resultado == "nao_executado" and resposta is None:
+        pedido["estado"] = "identificado" if pedido["etapa"] == "obter_contatos" else "pendente"
+    elif resultado == "executado" and _autorizado(decisoes["candidatos"].get(cid, {})):
+        validar_escolhas(caso, decisoes)
+        try:
+            _registrar_resposta(caso, cid, pedido, resposta)
+        except (ValueError, TypeError, KeyError):
+            raise ValueError("Resposta do fornecedor inválida para a conciliação.") from None
+    else:
+        raise ValueError("Resultado de conciliação ou autorização incompatível.")
+    pedido.setdefault("conciliacoes", []).append(dict(requisicao=requisicao, resultado=resultado, data=_momento()))
 
 
 def processar(caso, decisoes, provedor, gravar):
-    """A chamada gravar persiste o caso antes de cada despacho e depois de cada resultado."""
+    """Persiste a intenção antes de cada operação paga e o resultado antes da próxima."""
+    validar_escolhas(caso, decisoes)
     if provedor is None:
         return
-    if not all(callable(getattr(provedor, nome, None)) for nome in ("identificar", "obter_contatos")):
-        raise ProvedorIncompativel("Provedor sem consultas separadas de identidade e contato.")
+    _exigir_contrato(provedor)
     alvos = {a["id"]: a for a in caso["alvos"]}
     pedidos = caso.setdefault("pedidos", {})
     for c in caso["candidatos"]:
         cid = c["id"]
         marca = decisoes["candidatos"].get(cid, {})
-        if marca.get("Confirmado") != "sim" or marca.get("Autorizar consulta paga") != "sim":
+        if not _autorizado(marca):
             continue
         pedido = pedidos.setdefault(cid, {})
         if pedido.get("estado") == "incerto":
             raise ValueError("Pedido incerto. Conciliação manual necessária.")
+        if pedido.get("estado") == "encerrado":
+            continue
         identidade = _identificador(alvos[c["alvo_id"]], c, marca, provedor.identificadores)
         if not identidade:
             if "assinatura" in pedido:
                 raise ValueError("Identidade ou fornecedor mudou. Revise o pedido anterior.")
             pedido["estado"] = "identificador_necessario"
             continue
-        assinatura = hashlib.sha256(json.dumps([provedor.nome, identidade], sort_keys=True).encode()).hexdigest()
+        assinatura = _assinatura(provedor.nome, identidade)
         if pedido.get("assinatura", assinatura) != assinatura:
             raise ValueError("Identidade ou fornecedor mudou. Revise o pedido anterior.")
-        pedido["assinatura"] = assinatura
+        tipo = next(k for k in ("cnpj", "cpf", "nome") if k in identidade)
+        pedido.update(assinatura=assinatura, provedor=provedor.nome, tipo_identificador=tipo)
         if pedido.get("estado") in {"concluido", "sem_resultados"}:
             continue
         if pedido.get("estado") != "identificado":
-            opcoes = _executar(pedido, gravar, lambda: _opcoes(provedor.identificar(identidade), cid))
-            caso["provedor"].extend(opcoes)
-            pedido["estado"] = "identificado" if opcoes else "sem_resultados"
-            gravar()
-        opcoes = [r for r in caso["provedor"] if r["candidato_id"] == cid]
-        if len(opcoes) > 1:
-            opcoes = [r for r in opcoes if decisoes["provedor"].get(r["id"], {}).get("Confirmado") == "sim"]
-        if len(opcoes) != 1:
-            continue
-
-        def obter():
-            resposta = provedor.obter_contatos(opcoes[0]["id_externo"])
-            if not isinstance(resposta, list):
-                raise ValueError
-            contatos = []
-            for item in resposta:
-                if item.get("tipo") not in {"telefone", "WhatsApp", "e-mail", "endereço"} or not isinstance(item.get("valor"), str):
-                    raise ValueError
-                contatos.append({"candidato_id": cid, "origem": provedor.nome, "tipo": item["tipo"],
-                                 "valor": item["valor"], "data_fonte": item.get("data_fonte", ""), "data_consulta": _momento()})
-            return contatos
-        caso["contatos"].extend(_executar(pedido, gravar, obter))
-        pedido.update(estado="concluido", concluido_em=_momento())
-        gravar()
+            _executar(caso, cid, pedido, "identificar", provedor.identificar, identidade, gravar)
+        escolhida = _opcao(caso, cid, decisoes)
+        if escolhida and _autorizado(decisoes["candidatos"].get(cid, {})):
+            pedido.update(opcao_id=escolhida["id"], id_externo=escolhida["id_externo"])
+            _executar(caso, cid, pedido, "obter_contatos", provedor.obter_contatos, escolhida["id_externo"], gravar)

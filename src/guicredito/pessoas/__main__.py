@@ -18,6 +18,11 @@ def _parser():
     for campo in ("selecao", "aprofundamento", "planilha", "saida"):
         pesquisa.add_argument("--" + campo, type=Path, required=True)
     subs.add_parser("contatos", help="Consultar apenas os pedidos autorizados.").add_argument("--lote", type=Path, required=True)
+    conciliar = subs.add_parser("conciliar", help="Registrar a conferência de um pedido incerto com o fornecedor.")
+    conciliar.add_argument("--lote", type=Path, required=True)
+    conciliar.add_argument("--requisicao", required=True, help="ID da requisição no JSON privado do caso.")
+    conciliar.add_argument("--resultado", choices=("nao_executado", "executado", "encerrar"), required=True)
+    conciliar.add_argument("--arquivo", type=Path, help="Resposta recuperada do fornecedor para um pedido executado.")
     desc = subs.add_parser("descartar", help="Revisar os casos marcados para exclusão.")
     desc.add_argument("--lote", type=Path, required=True)
     desc.add_argument("--confirmar", metavar="CODIGO")
@@ -44,7 +49,10 @@ def _comando(a, cfg, servicos):
         for detalhe in dict.fromkeys(falhas):
             print(detalhe, file=sys.stderr)
         if not falhas:
-            print("Modelo configurado listado pelo gateway.")
+            if cfg.hermes_modelo == "hermes-agent":
+                print("Modelo hermes-agent listado pelo gateway.")
+            else:
+                print("Modelo configurado listado pelo gateway.")
         return 2 if falhas else 0
     if a.comando == "preparar-cnpj":
         from .cnpj import preparar_cnpj, prever_espaco
@@ -61,6 +69,10 @@ def _comando(a, cfg, servicos):
     if a.comando == "importar-oab":
         total = fluxo.importar_oab(a.lote, a.arquivo)
         print(f"Registros profissionais incorporados: {total}.")
+        return 0
+    if a.comando == "conciliar":
+        fluxo.conciliar_contatos(a.lote, a.requisicao, a.resultado, a.arquivo)
+        print("Conciliação de uma requisição registrada.")
         return 0
     if a.comando == "descartar":
         if a.confirmar:
@@ -89,7 +101,7 @@ def _comando(a, cfg, servicos):
         print("Busca web não configurada.")
     if not cfg.indice_cnpj and not servicos.get("cnpj"):
         print("Índice CNPJ não configurado.")
-    print("Relatório:", a.saida / "relatorio.html")
+    print("Relatório do lote: relatorio.html")
     return 0
 
 
@@ -117,6 +129,10 @@ def main(argv=None, servicos=None):
             "A pasta do lote não pode ser um link.", "Lote inexistente.",
             "Prévia vencida ou incompatível. Confira novamente as marcações.",
             "Resultado pago incerto. Conciliar com o fornecedor antes de repetir.",
+            "Requisição incerta não encontrada.", "A opção confirmada diverge do contato solicitado.",
+            "Identidade ou fornecedor mudou. Revise o pedido anterior.",
+            "Informe o arquivo da resposta apenas para a operação executada.",
+            "Resposta do fornecedor inválida para a conciliação.", "Resultado de conciliação ou autorização incompatível.",
             "Pedido incerto. Conciliação manual necessária.", "Índice CNPJ indisponível.",
             "Pesquisa interrompida após possível envio. Confira o lote antes de nova consulta.",
             "Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.",
