@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from hmac import compare_digest
 
 from . import contatos as dados_pagos
+from .evidencias import ErroPesquisaParcial, pesquisar_web, salvar_recorte
+from .http import ErroGateway
 from .lote import FORMATO, Lote, escrever_json, ler_json
 from .planilha import gravar_planilha, ler_decisoes
 from .relatorio import projetar_revisao, renderizar, renderizar_revisao
@@ -57,13 +59,12 @@ def _salvar(lote, dados, decisoes):
             lote.caminho(f"{caso['processo']}/pessoas.json")
             pasta.mkdir(mode=0o700)
             escrever_json(pasta / "pessoas.json", {k: v for k, v in caso.items() if k not in SEPARADOS})
-            for secao in SEPARADOS:
-                escrever_json(pasta / f"{secao}.json", caso[secao])
             for ev in caso["evidencias"]:
                 trecho = ev.get("trecho", "")
                 if trecho:
-                    sha = hashlib.sha256(trecho.encode()).hexdigest()
-                    (pasta / f"evidencia-{sha}.txt").write_text(trecho, encoding="utf-8")
+                    ev.update(salvar_recorte(pasta, ev, trecho))
+            for secao in SEPARADOS:
+                escrever_json(pasta / f"{secao}.json", caso[secao])
         gravar_planilha(base / "pessoas.xlsx", dados, decisoes)
         (base / "relatorio.html").write_text(renderizar(dados, decisoes), encoding="utf-8")
         fichas = projetar_revisao(dados, decisoes)
@@ -154,7 +155,8 @@ def _consulta(caso, alvo, fonte):
     for item in caso["consultas"]:
         if item.get("id") == chave:
             return item
-    item = dict(id=chave, alvo_id=alvo["id"], fonte=fonte, estado="nao_consultado", data=_agora())
+    item = dict(id=chave, alvo_id=alvo["id"], fonte=fonte, estado="nao_consultado",
+                motivo="Aguardando processamento.", data=_agora())
     caso["consultas"].append(item)
     return item
 
@@ -170,16 +172,20 @@ def _web(caso, alvo, cliente, http, gravar):
     if cliente is None:
         consulta.update(estado="nao_configurado", motivo="Busca não configurada.")
         return
-    from .evidencias import pesquisar_web
     consulta.update(estado="incerto", motivo="Pesquisa iniciada.", data=_agora())
     gravar()
-    try:
-        resposta = pesquisar_web(alvo, cliente, http)
+    def incorporar(resposta):
         for k in ("candidatos", "evidencias", "contatos"):
             _unir(caso[k], resposta.get(k, []))
-        caso["consultas"].extend(resposta["consultas"])
+        _unir(caso["consultas"], resposta["consultas"])
+    try:
+        resposta = pesquisar_web(alvo, cliente, http)
+    except ErroPesquisaParcial as erro:
+        incorporar(erro.parcial)
+        raise ValueError("Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.") from None
     except Exception:
         raise ValueError("Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.") from None
+    incorporar(resposta)
     estado = resposta["consultas"][0]["estado"]
     consulta.update(estado=estado, motivo="", data=_agora())
     gravar()
@@ -200,27 +206,34 @@ def pesquisar(entrada, config, servicos, saida):
         decisoes = ler_decisoes(lote.caminho("pessoas.xlsx"), anterior) if anterior else {}
         ativos = [c for c in dados["casos"] if
                   decisoes.get("casos", {}).get(c["processo"], {}).get("Descartar") != "sim"]
+        for caso in ativos:
+            for alvo in caso["alvos"]:
+                if alvo["papel"] == "advogado":
+                    _consulta(caso, alvo, "OAB")
+                elif alvo["tipo"] == "PJ" or alvo["papel"] == "devedor":
+                    _consulta(caso, alvo, "CNPJ")
+                if (alvo["tipo"], alvo["papel"]) != ("PJ", "devedor"):
+                    _consulta(caso, alvo, "Hermes")
         cliente = http = None
-        if config.busca and ativos:
-            if "hermes" in servicos:
-                cliente, http = servicos["hermes"], servicos["http"]
-            else:
-                cliente, http = criar_servicos_web(config)
-            cliente.exigir_politica()  # falha antes de enviar qualquer nome ou iniciar uma fonte
-            falhas = cliente.verificar()
-            if falhas:
-                raise ValueError("Falha na configuração do gateway: " + ", ".join(falhas))
         indice = servicos.get("cnpj")
         if indice is None and config.indice_cnpj is not None:
             indice = IndiceCNPJ(config.indice_cnpj)
         oab = servicos.get("oab", consulta_oab)
         salvar = lambda: _salvar(lote, dados, decisoes)
         try:
+            if config.busca and ativos:
+                if "hermes" in servicos:
+                    cliente, http = servicos["hermes"], servicos["http"]
+                else:
+                    cliente, http = criar_servicos_web(config)
+                cliente.exigir_politica()
+                if cliente.verificar():
+                    raise ErroGateway("Falha na configuração do gateway.")
             for caso in ativos:
                 for alvo in caso["alvos"]:
                     _registros(caso, alvo, indice, oab)
                     _web(caso, alvo, cliente, http, salvar)
-        except ValueError:
+        except (ValueError, ErroGateway):
             salvar()
             raise
         _incorporar_conferencias(dados, decisoes)
@@ -256,19 +269,27 @@ def _previa(dados, decisoes, marca_excel):
 def prever_descarte(pasta):
     with Lote(pasta) as lote:
         dados = _carregar(lote)
-        d = ler_decisoes(lote.caminho("pessoas.xlsx"), dados)
+        d = ler_decisoes(lote.caminho("pessoas.xlsx"), dados, para_descarte=True)
         return _previa(dados, d, lote.marca_excel)[1]
 
 
 def confirmar_descarte(pasta, codigo):
     with Lote(pasta) as lote:
         dados = _carregar(lote)
-        d = ler_decisoes(lote.caminho("pessoas.xlsx"), dados)
+        d = ler_decisoes(lote.caminho("pessoas.xlsx"), dados, para_descarte=True)
         marcados, previa = _previa(dados, d, lote.marca_excel)
         if not marcados or not compare_digest(previa["codigo"].encode(), codigo.encode()):
             raise ValueError("Prévia vencida ou incompatível. Confira novamente as marcações.")
         suprimir = {c["ordem"] for c in marcados}
+        numeros = {c["processo"] for c in marcados}
         dados["casos"] = [c for c in dados["casos"] if c["ordem"] not in suprimir]
+        for caso in dados["casos"]:
+            relacionados = {c["id"] for c in caso["candidatos"] if c.get("processo_referenciado") in numeros}
+            caso["candidatos"] = [c for c in caso["candidatos"] if c["id"] not in relacionados]
+            for secao in ("evidencias", "contatos", "provedor"):
+                caso[secao] = [r for r in caso[secao] if r.get("candidato_id") not in relacionados]
+            for cid in relacionados:
+                caso.get("pedidos", {}).pop(cid, None)
         dados["suprimidas"] = sorted(set(dados["suprimidas"]) | suprimir)
         _salvar(lote, dados, d)
         return len(marcados)
@@ -328,3 +349,20 @@ def importar_oab(pasta, arquivo):
         _incorporar_conferencias(dados, decisoes)
         _salvar(lote, dados, decisoes)
         return len(vistos)
+
+
+def conciliar_contatos(pasta, requisicao, resultado, arquivo=None):
+    """Incorpora a conferência de Nick no pedido incerto sem chamar o provedor."""
+    with Lote(pasta) as lote:
+        dados = _carregar(lote)
+        decisoes = ler_decisoes(lote.caminho("pessoas.xlsx"), dados)
+        casos = [c for c in dados["casos"] if decisoes["casos"][c["processo"]].get("Descartar") != "sim"
+                 and any(p.get("requisicao") == requisicao and p.get("estado") == "incerto"
+                         for p in c.get("pedidos", {}).values())]
+        if len(casos) != 1:
+            raise ValueError("Requisição incerta não encontrada.")
+        if (arquivo is not None) != (resultado == "executado"):
+            raise ValueError("Informe o arquivo da resposta apenas para a operação executada.")
+        resposta = ler_json(arquivo) if arquivo is not None else None
+        dados_pagos.conciliar_pedido(casos[0], decisoes, requisicao, resultado, resposta)
+        _salvar(lote, dados, decisoes)

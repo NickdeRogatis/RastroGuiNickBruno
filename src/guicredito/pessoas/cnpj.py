@@ -167,6 +167,16 @@ def importar_snapshot(arquivos: Mapping, competencia: str, destino: Path, layout
     fontes = [p.resolve() for partes in listas.values() for p in partes]
     if not all(listas.values()) or len(set(fontes)) != len(fontes) or destino.resolve() in fontes:
         raise ValueError("Arquivos CNPJ inválidos ou repetidos.")
+    if destino.is_symlink():
+        raise ValueError("O destino do índice não pode ser um link.")
+    if destino.exists():
+        try:
+            with closing(sqlite3.connect(destino.resolve().as_uri() + "?mode=ro", uri=True)) as existente:
+                registro = existente.execute("SELECT registro FROM manifesto").fetchone()
+                if not registro or not isinstance(json.loads(registro[0]).get("contagens"), dict):
+                    raise ValueError
+        except (sqlite3.Error, ValueError, TypeError, AttributeError):
+            raise ValueError("O destino contém um arquivo diferente do índice CNPJ.") from None
     anterior, livre = _disco(destino)
     # Compressed inputs are already present. The builder streams them without extracting to disk.
     previsto = estimar_espaco([0], layout.estimativas.get("temporarios"),

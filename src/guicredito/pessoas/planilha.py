@@ -12,7 +12,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from guicredito.djen.texto import limpar_para_excel
-from guicredito.pessoas.contatos import validar_cpf
+from guicredito.pessoas.contatos import validar_cpf, validar_escolhas
 
 
 CABECALHOS = {
@@ -201,19 +201,19 @@ def _manual(coluna, celula):
     return valor
 
 
-def ler_decisoes(caminho: Path, dados: dict) -> dict:
+def ler_decisoes(caminho: Path, dados: dict, *, para_descarte=False) -> dict:
     _fechado(caminho)
     try:
         wb = load_workbook(caminho, read_only=True, data_only=False, keep_links=False)
     except (BadZipFile, KeyError, OSError):
         raise ValueError("Planilha inválida ou indisponível.") from None
     try:
-        return _conferir(wb, dados)
+        return _conferir(wb, dados, para_descarte=para_descarte)
     finally:
         wb.close()
 
 
-def _conferir(wb, dados):
+def _conferir(wb, dados, *, para_descarte=False):
     if set(wb.sheetnames) != set(CABECALHOS):
         raise ValueError("Abas da planilha incompatíveis com o lote.")
     decisoes = {secao: {} for secao, _ in _MANUAIS.values()}
@@ -253,4 +253,7 @@ def _conferir(wb, dados):
             destino[chave] = marcas
         if any(esperadas[nome].values()):
             raise ValueError("Faltam linhas do lote na planilha.")
+    for caso in dados["casos"]:
+        if not (para_descarte and decisoes["casos"][caso["processo"]].get("Descartar") == "sim"):
+            validar_escolhas(caso, decisoes)
     return decisoes

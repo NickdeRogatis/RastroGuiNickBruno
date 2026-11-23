@@ -73,6 +73,15 @@ def test_refresh_interrompido(snapshot):
     assert sorted(p.name for p in snapshot[-1].parent.iterdir()) == ["indice.sqlite", "layout.json", "snapshot"]
 
 
+def test_preparo_recusa_destino_com_arquivo_de_outro_tipo(snapshot):
+    destino = snapshot[-1]
+    destino.write_bytes(b"arquivo privado que precisa permanecer intacto")
+    antes = destino.read_bytes()
+    with pytest.raises(ValueError, match="destino"):
+        preparar_cnpj(*snapshot)
+    assert destino.read_bytes() == antes
+
+
 def test_ausente_ou_corrompido(tmp_path):
     alvo = {"id": "exemplo", "tipo": "PJ", "nome": "BANCO EXEMPLO S.A.", "papel": "credor"}
     p = tmp_path / "indice"

@@ -106,7 +106,7 @@ class Lote:
         return estado
 
     def _excel_livre(self):
-        if (self.pasta / "~$pessoas.xlsx").exists():
+        if any((self.pasta / nome).exists() for nome in ("~$pessoas.xlsx", ".~lock.pessoas.xlsx#")):
             raise ValueError("Feche a planilha antes de atualizar o lote.")
 
     def publicar(self, montar):

@@ -140,7 +140,7 @@ def _limitacoes(caso):
         estado = consulta.get("estado")
         if estado == "nao_configurado":
             limites.add("fonte não configurada")
-        elif estado in {"nao_consultado", "interrompido"}:
+        elif estado in {"nao_consultado", "interrompido", "incerto"}:
             limites.add("fonte indisponível")
     return limites
 
