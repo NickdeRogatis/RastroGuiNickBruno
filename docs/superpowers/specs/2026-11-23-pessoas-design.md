@@ -17,7 +17,7 @@ A pesquisa começa após a seleção de até dez casos, usando a seleção do ap
 
 Duas passagens (**decisão do Nick**):
 1. `pesquisar`: fontes gratuitas para identificar candidatos e reunir indícios de capacidade de pagamento.
-2. `contatos`: provedor pago para os candidatos cuja identidade Nick confirmou.
+2. `contatos` fica para uma fase posterior. Nick confirma a identidade, autoriza o gasto para aquela pessoa e executa o comando. A primeira rodada usa apenas fontes gratuitas (**decisão do Nick**).
 
 Entregar HTML legível, Excel editável para confirmação e JSON por processo. Todos os achados começam como candidatos; confiança alta não substitui confirmação (**decisão do Nick**).
 
@@ -27,7 +27,7 @@ Critério de aceite *(escolha minha)*: lote fictício com dois casos percorre as
 
 Não alterar DJEN, aprofundamento, score, ranking ou arquivos existentes. Não implementar cessão, negociação, cobrança, agendamento, avaliação patrimonial completa, salário estimado, saldo da dívida ou garantias de solvência. Não implementar uma busca exaustiva de processos ou acesso a autos restritos.
 
-O programa nunca envia mensagens, e-mails, chamadas, pedidos de amizade ou qualquer contato (**decisão do Nick**). A decisão de contato fica com Nick.
+O programa nunca envia mensagens, e-mails, chamadas ou pedidos de amizade. Antes da cessão, Nick só fala com o credor ou com o advogado dele. O contato com o devedor ou com o advogado do devedor fica para depois da cessão (**decisão do Nick**). Um advogado com lado desconhecido precisa ter o vínculo esclarecido antes de qualquer abordagem.
 
 ## 4. Anti-objetivos e fronteiras
 
@@ -35,7 +35,7 @@ Pesquisar apenas devedores, credores PF/PJ em igualdade de tratamento, e advogad
 
 Sobre o devedor, coletar emprego/empregador em páginas profissionais públicas; participações societárias, situação e capital declarado das empresas; outros processos homônimos; links públicos Instagram/Facebook como indícios de identidade, cidade ou empregador. Não catalogar posts, fotos, estilo de vida ou conexões (**decisão do Nick**).
 
-Sobre credores e advogados: contatos públicos, inclusive dados profissionais do cadastro OAB; contatos pagos apenas após confirmação. O provedor oferece endereço, telefone/WhatsApp e e-mail (**decisão do Nick**). Um telefone não será rotulado WhatsApp sem indicação da fonte *(escolha minha)*.
+Sobre credores e advogados: contatos públicos, inclusive dados profissionais do cadastro OAB; contatos pagos dependem da confirmação de identidade e da autorização individual do gasto. O provedor oferece endereço, telefone/WhatsApp e e-mail (**decisão do Nick**). Um telefone não será rotulado WhatsApp sem indicação da fonte *(escolha minha)*.
 
 Capital social não equivale a patrimônio pessoal disponível; emprego não prova renda; homonímia não prova identidade; ausência de resultados não prova falta de capacidade de pagamento *(escolha minha)*. Nunca promover inferências do modelo a fatos sem evidência.
 
@@ -46,8 +46,8 @@ Capital social não equivale a patrimônio pessoal disponível; emprego não pro
 | 08/11 §4: não virar lista de abordagem; sem contatos, telefone ou e-mail | Coletar contatos de devedor, credor e advogados antes da compra; nenhuma abordagem automática (**decisão do Nick**). |
 | 08/11 §4: nomes nunca enviados a serviços externos | A consulta nominal mínima pode sair do Hermes para o buscador gratuito. Sites públicos e registros recebem os dados necessários à consulta. Só o provedor de contatos recebe CPF, quando informado para uma identidade confirmada. A inferência fica no Studio (**decisão do Nick**). |
 | 08/11 §§4–5: não raspar tribunal; DJEN fonte única | Aprofundamento já acrescentou e-SAJ; pessoas acrescenta páginas públicas e registros. Isso não autoriza burlar bloqueios nem afirma permissão jurídica de raspagem (**decisão do Nick**). |
-| 22/11 §3: provedores fora; consulta só nos 2–3 casos comprados | Provedor pago de contatos para pessoas confirmadas dos casos selecionados, antes da compra (**decisão do Nick**). |
-| 08/11 §1: falar com devedor só depois de virar credor | O sistema passa a possuir contatos antes da compra. Mudança na ordem do contato humano não foi decidida: pendência para Nick (**decisão do Nick** quanto à coleta). |
+| 22/11 §3: provedores fora; consulta só nos 2–3 casos comprados | Provedor pago de contatos para pessoas confirmadas e marcadas por Nick para a consulta paga dos casos selecionados, antes da compra (**decisão do Nick**). |
+| 08/11 §1. Falar com o devedor só depois da cessão | A coleta pode anteceder a compra. Antes da cessão, o contato humano fica restrito ao credor e ao advogado do credor (**decisão do Nick**). |
 
 A fronteira de terceiros da seção 7 do documento de 26/10 continua. Bases vazadas continuam fora. Nenhuma mudança neste documento altera retroativamente o funcionamento das duas etapas existentes.
 
@@ -72,7 +72,7 @@ Ler somente os resultados dos CNJs selecionados e linhas correspondentes das aba
 - alvo: id estável, CNJ, papel, tipo PF/PJ, nome original, fonte do papel;
 - candidato: id, alvo_id, fonte/chave externa, nome, confiança, indícios, conflitos, status de verificação;
 - evidência: id, URL, data UTC, fonte, trecho, tipo página/snippet/registro/manual, arquivo e SHA-256;
-- confirmação: candidato_id, sim/não/vazio, CPF opcional, data da leitura do Excel;
+- decisão por candidato: ID estável, `Confirmado`, CPF opcional e `Autorizar consulta paga` (sim/não/vazio, padrão vazio). Guardar a data de leitura. Cada vínculo do índice empresarial referencia o candidato e a evidência que o sustenta.
 - consulta: fonte, estado, motivo, horário, versão do extrator;
 - contato: candidato confirmado, identificador do provedor, valor, tipo, origem/data, sem afirmar atualidade além do que o fornecedor informa.
 
@@ -82,7 +82,7 @@ IDs persistentes independem da ordem das linhas. Não fundir automaticamente dua
 
 1. Validar entradas; extrair alvos das partes, complementando com texto do Excel. Todo PF no polo devedor entra: executado, réu, avalista, fiador, coobrigado *(escolha minha)*. PJ devedora recebe só seu cadastro, situação e capital; seus sócios não viram alvos. Credor PJ não autoriza buscar seus donos.
 2. Parser próprio de advogados em pessoas interpreta nomes, OAB e vínculo com a parte; sem vínculo comprovável, mostrar “lado desconhecido” *(escolha minha)*. Não pesquisar testemunhas ou nomes meramente citados.
-3. CNPJ local e cadastro OAB oferecem candidatos e evidências. Contatos gratuitos de credor/advogado ficam separados de contatos pagos *(escolha minha)*.
+3. Consultar o índice CNPJ no SSD interno do Studio já na primeira rodada. Conferir o volume previsto e o espaço livre antes de obter a base. Quando o cadastro OAB apresentar captcha, registrar na planilha privada o nome do advogado, OAB/UF disponível, link para o cadastro e motivo da pendência. O lote segue. Nick pode conferir e preencher os campos profissionais mais tarde (**decisão do Nick**).
 4. O agente Hermes executa a busca (**decisão do Nick**, revisão de 23/11). O Python monta a consulta a partir de um único alvo autorizado e do objetivo correspondente ao seu papel. Exemplos de objetivos são localizar página profissional do devedor, referência pública a outro processo, site institucional do credor ou página profissional do advogado. Uma consulta recebe somente nome e, quando necessário, cidade ou termo profissional. CPF, endereço residencial, telefone, contatos, arquivos e texto integral do processo ficam fora desse pedido.
 5. O adapter implementa `buscar(consulta) -> resultados(url, titulo, snippet)` sobre a API do agente (§11). Só admite resultados da saída efetiva de `web_search`. O cliente mantém a interface substituível por um dublê nos testes. Com a busca desligada, registra “busca não configurada” e prossegue com os registros. Uma busca ligada que falha tem outro tratamento (§12).
 6. O Python abre uma vez cada URL pública relevante devolvida pela busca e reaproveita sua evidência no lote *(escolha minha — A17)*. Em LinkedIn, Instagram e Facebook faz um único GET direto, sem login, cookies, sessão, redirecionamento, navegação interna ou repetição. Se houver barreira, captcha ou erro, conservar título, snippet e URL, marcar “não verificado — conferir no navegador” e seguir. Sem snippet útil, registrar só o link (**decisão do Nick**). Essa divisão permite contar e auditar as tentativas. Ainda que disponível no Studio, `web_extract` fica fora da pesquisa nominal nesta versão.
@@ -95,30 +95,45 @@ IDs persistentes independem da ordem das linhas. Não fundir automaticamente dua
 
 ## 9. Passagem 2 — contatos
 
-*(escolha minha)*: só pessoas com `Confirmado = sim` podem gerar consultas pagas. Ler workbook salvo antes de qualquer chamada. CPF opcional deve passar formato, dois dígitos verificadores e rejeição de sequências repetidas; CPF inválido interrompe a validação da passagem, sem cobrança.
+**Decisão do Nick.** A primeira rodada utiliza somente fontes gratuitas. O Excel preserva as marcações para o futuro. Mesmo após configurar um fornecedor, só iniciar a identificação paga quando o mesmo candidato tiver `Confirmado = sim` e `Autorizar consulta paga = sim` e Nick executar `contatos`. A ausência de telefone ou a existência de e-mail público não muda nenhuma marcação. Revalidar ambas antes de solicitar contatos após desambiguação. CPF opcional deve passar os dois dígitos verificadores e a rejeição de sequências repetidas antes da primeira chamada.
 
-Interface do provedor ainda não escolhido (**decisão do Nick**): `identificar(identidade_confirmada)` e `obter_contatos(id_confirmado)`. Sem provedor: “provedor não configurado”, parar sem consultas. Usar CPF informado; sem CPF, nome e indícios confirmados (cidade/faixa etária). Se fornecedor exigir CPF, marcar “identificador necessário”, nunca adivinhar.
+Interface do provedor ainda não escolhido (**decisão do Nick**): `identificar(identidade_confirmada)` e `obter_contatos(id_confirmado)`. Sem provedor: “provedor não configurado”, manter as marcações pendentes e encerrar sem consultas. Usar CPF informado; sem CPF, nome e indícios confirmados (cidade/faixa etária). Se fornecedor exigir CPF, marcar “identificador necessário”, nunca adivinhar.
 
 *(escolha minha — A7)*: quando o fornecedor retorna várias identidades, persistir apenas IDs opacos e indícios mínimos de desambiguação, sem contatos, CPF integral ou resposta bruta. Gerar candidatos na aba Provedor; Nick confirma um, salva e executa contatos novamente. Validar que o candidato pertence ao alvo confirmado. Somente então buscar/persistir contatos. Exigir fornecedor com descoberta separada de contatos ou projeção equivalente; contrato que só devolve contatos em massa é incompatível com esta garantia e fica pendente de escolha. Não logar payload bruto nem armazenar contatos descartados.
 
-Credores PF/PJ e advogados também podem usar o provedor após confirmação; PJ usa CNPJ validado derivado do registro confirmado, nunca CPF inventado *(escolha minha — A8)*. Se o fornecedor não suporta PJ, registrar capacidade não disponível. Licenciamento e finalidade precisam ser compatíveis; não escolher fornecedor nesta entrega.
+Credores PF/PJ e advogados também podem usar o provedor após confirmação e autorização individual; PJ usa CNPJ validado derivado do registro confirmado, nunca CPF inventado *(escolha minha — A8)*. Se o fornecedor não suporta PJ, registrar capacidade não disponível. Licenciamento e finalidade precisam ser compatíveis; não escolher fornecedor nesta entrega.
 
 ## 10. Excel, HTML, JSON e repetição
 
-Arquivos por lote em `saida/pessoas/<lote>/`: `relatorio.html`, `pessoas.xlsx`, `<CNJ>/*.json` (**decisão do Nick**). Não modificar ranking nem arquivos do aprofundamento.
+O lote privado contém `relatorio.html`, `pessoas.xlsx` e `<CNJ>/*.json` em `saida/pessoas/<lote>/`. O arquivo destinado ao revisor chama-se `revisao.html`. Nick é o único que recebe o conjunto completo e toma as decisões de identidade, gasto e exclusão (**decisão do Nick**).
 
 *(escolha minha — A9)*: abas:
-- **Candidatos**: Lote, Alvo ID, Candidato ID, Processo, Papel, Tipo, Nome, Confiança, Cidade, Empregador, Faixa etária, Evidências IDs, URLs, Verificação, **Confirmado**, **CPF**.
+- **Candidatos**: Lote, Alvo ID, Candidato ID, Processo, Papel, Tipo, Nome, Confiança, Cidade, Empregador, Faixa etária, Evidências IDs, URLs, Verificação, **Confirmado**, **CPF**, **Autorizar consulta paga**.
 - **Provedor**: Alvo ID, Candidato ID de origem, Provedor ID, Nome candidato, Indícios mínimos, **Confirmado**. Sem contatos antes da confirmação específica.
 - **Evidências**: ID, Candidato ID, Categoria, Fonte, URL, Data, Trecho, SHA-256, Estado.
 - **Contatos**: Candidato ID, Origem, Tipo, Valor, Data da fonte, Data da consulta; somente dados públicos permitidos ou pagos confirmados.
+- **Casos**: código de revisão, processo, **Descartar** (sim/vazio). A marca seleciona o caso para a prévia de exclusão.
+- **Vínculos**: Caso ID, Candidato ID, Vínculo ID, nome da empresa, evidências e capital declarado. Aba de leitura. A confirmação vem da linha correspondente na aba Candidatos. Coincidências de nome sem evidência de identidade comum geram candidatos distintos.
+- **OAB**: Alvo ID, nome encontrado, OAB/UF disponível, link do cadastro, estado, **OAB/UF conferida**, **dados profissionais conferidos**, **data da conferência**. A entrada manual preserva o que a consulta automática encontrou.
 - **Como ler**: limitações, legendas, instrução de salvar/fechar Excel, contagens e fontes não consultadas.
 
-Nick edita somente Confirmado (sim/não/vazio) e CPF na aba Candidatos, e Confirmado em Provedor. CPF é texto para preservar zeros. IDs e demais colunas não são autoridade para ampliar a seleção: comparar com manifesto local; rejeitar IDs desconhecidos, duplicados, confirmações incompatíveis e fórmulas nos campos editáveis antes de chamadas. Alterações inesperadas geram erro, sem sobrescrever Excel.
+Nos campos em negrito, Nick informa decisões ou resultados de conferência manual. Nas abas Candidatos e Provedor, `Confirmado` aceita sim/não/vazio. CPF é texto para preservar zeros. Validar os IDs e seus vínculos com o manifesto antes de efeitos externos. Recusar linhas desconhecidas ou duplicadas, fórmulas em campos editáveis e decisões incompatíveis. A ordenação das linhas não altera a identidade. Preservar todos os campos manuais na reexecução.
 
-*(escolha minha — A10)*: por CNJ, `pessoas.json`, `consultas.json`, `evidencias.json`, `contatos.json` e recortes `evidencia-<id>.txt`; manifesto do lote contém versões, hashes de entrada e identidade da seleção, sem segredos. Escrita atômica e bloqueio de lote contra duas execuções simultâneas. Ao repetir, ler Excel primeiro, mesclar por IDs estáveis e preservar Confirmado/CPF; não reaproveitar confirmação em candidato diferente. Arquivo aberto/erro de gravação interrompe sem perder versão anterior. Reutilizar evidência e consultas pagas concluídas com data original; atualização usa novo lote. Mudança de entrada/seleção incompatível exige outro lote. Não repetir automaticamente pedido pago de resultado incerto: exigir conciliação pelo ID da requisição antes.
+*(escolha minha — A10)*: por CNJ, `pessoas.json`, `consultas.json`, `evidencias.json`, `contatos.json` e recortes `evidencia-<id>.txt`; manifesto do lote contém versões, hashes de entrada e identidade da seleção, sem segredos. Escrita atômica e bloqueio de lote contra duas execuções simultâneas. Ao repetir, ler Excel primeiro, mesclar por IDs estáveis e preservar confirmações, CPF, autorização de gasto, OAB manual e descarte pendente; não reaproveitar confirmação em candidato diferente. Arquivo aberto/erro de gravação interrompe sem perder versão anterior. Reutilizar evidência e consultas pagas concluídas com data original; atualização usa novo lote. Mudança de entrada/seleção incompatível exige outro lote. Não repetir automaticamente pedido pago de resultado incerto: exigir conciliação pelo ID da requisição antes.
 
-HTML escapa todo texto e atributos, aceita hyperlinks apenas HTTP(S), não incorpora scripts/HTML das fontes. Excel escreve conteúdo externo como texto, evitando execução de fórmulas *(escolha minha — A11)*. Terminal imprime somente contagens e caminho do relatório; diagnósticos de configuração podem nomear endpoint sanitizado e chaves ausentes, nunca nomes, CPFs, contatos, snippets ou segredos *(escolha minha)*.
+HTML escapa todo texto e atributos, aceita hyperlinks apenas HTTP(S), não incorpora scripts/HTML das fontes. Excel escreve conteúdo externo como texto, evitando execução de fórmulas *(escolha minha — A11)*. Durante pesquisa e contatos, o terminal imprime contagens e caminho do relatório. Na prévia de descarte também exibe rótulos dos casos e código de confirmação. Diagnósticos de configuração podem nomear endpoint sanitizado e chaves ausentes, nunca nomes, CPFs, contatos, snippets ou segredos *(escolha minha)*.
+
+### Resumo para decidir se o caso merece avançar
+
+**Decisão do Nick.** O revisor recebe apenas `revisao.html`. A ficha mostra um rótulo como “Caso 01”, a fase processual em termos gerais, categorias de indícios confirmados e limitações. Se houver apenas uma coincidência de nome no quadro societário, a ficha diz **“vínculo empresarial pendente de confirmação”**. Quando Nick confirma a identidade do candidato correspondente ao registro societário, a ficha indica participação empresarial e a faixa do capital social declarado da empresa. Se o valor faltar, exibir “capital não informado”. A faixa descreve a empresa, sem estimar o patrimônio pessoal do devedor.
+
+*(escolha minha — A18)* Gerar o arquivo do revisor a partir de uma lista fechada de campos e frases próprias. Usar rótulo estável dentro do lote, fase ampla, estado do vínculo, faixa de capital e limitações categóricas. Para a primeira versão, usar faixas em reais: abaixo de 100 mil, de 100 mil a menos de 1 milhão, e a partir de 1 milhão. Somente o arquivo privado contém o mapa entre rótulos e processos. O resumo não recebe nomes de pessoas ou empresas, CNJ, OAB, CPF, contatos, endereço, empregador, URL, citações, datas exatas ou texto livre da fonte. Aplicar o mesmo critério a atributos HTML, título, comentários, nomes de arquivos e metadados. Nick entrega o resumo ao revisor pelo meio que escolher.
+
+### Descarte confirmado por caso
+
+**Decisão do Nick.** Nick marca `Descartar = sim` no Excel e revisa a prévia dos casos pelo rótulo. A confirmação explícita remove a pesquisa desses casos da etapa `pessoas`: linhas de todas as abas, recortes, JSON, dados pessoais no manifesto e os dois relatórios gerados no lote. Regerar os relatórios com os casos mantidos. O índice do CNPJ é uma fonte compartilhada. O DJEN, as entradas do e-SAJ e os demais casos continuam disponíveis.
+
+*(escolha minha — A19)* O comando `descartar --lote <pasta>` exibe a prévia e um código vinculado ao lote e à seleção exata. `descartar --lote <pasta> --confirmar <código>` repete a validação e aplica o descarte sob bloqueio. Alteração na seleção invalida o código. Registrar apenas as posições suprimidas na seleção imutável do lote para que uma reexecução não reconstrua casos descartados. Preparar a nova geração de saídas antes de remover a anterior. Uma execução interrompida retoma a limpeza antes de liberar qualquer exportação ou consulta do lote. Eliminar temporários e versões de trabalho controladas por `pessoas`. O descarte alcança a cópia do resumo sob controle do programa. Cópias já entregues e retenção no Hermes ou nos fornecedores têm ciclo próprio, a considerar na revisão jurídica.
 
 ## 11. Conexão com o Mac Studio
 
@@ -173,7 +188,7 @@ O contrato de resposta foi observado no ensaio anterior com uma consulta públic
 | erro_entrada | CNJ/hash/Excel/CPF/config inválido; corrigir antes de chamadas |
 | interrompido | falha de serviço central; restantes não consultados |
 
-CNPJ não configurado deve aparecer como limitação explícita, sem impedir OAB/busca; índice configurado corrompido interrompe. OAB com captcha conhecido usa caminho manual declarado; bloqueio inesperado interrompe registro/lote e oferece alternativa manual, sem tentar contornar.
+CNPJ não configurado deve aparecer como limitação explícita, sem impedir OAB/busca; índice configurado corrompido interrompe. Qualquer captcha reconhecido na OAB gera pendência manual na planilha e o lote continua. Uma indisponibilidade geral do registro é falha de serviço (§12).
 HTTP de páginas não aceita cookies; redirects não são seguidos automaticamente (especialmente redes sociais). URLs públicas HTTP(S) têm host validado; recusar IPs locais, endpoints internos e esquemas executáveis para downloads originados de busca. O transporte autenticado do Hermes é exclusivo do loopback. Conteúdo externo é dado, nunca instrução para chamadas ou alteração de escopo.
 
 ## 13. Viabilidade para quem construir
@@ -183,8 +198,8 @@ Todas as propostas abaixo são *(escolha minha — A16)*; nenhuma foi testada on
 | Questão | Evidência local e resposta proposta |
 |---|---|
 | Advogados/OAB/lado sem mudar DJEN | e-SAJ entrega `partes_linhas` como células textuais, sem estrutura garantida. Parser pessoas preserva vínculo apenas quando explícito; complementar com Texto de Publicações. A API DJEN tem `destinatarioadvogados[].advogado.numero_oab`, mas Excel não exporta esse campo. Não reler ~700 MB para recuperá-lo. Se necessário depois, adapter próprio de consulta pontual por processo/publicação, contrato ainda a validar, sem depender dele no MVP. Ausente OAB: busca nominal gera candidatos; lado desconhecido permanece visível. |
-| CNPJ por nome de sócio | F13 descreve download completo mensal; não há endpoint nominal assegurado. Proposta: ingestão separada de snapshot oficial em streaming CSV/ZIP para SQLite em disco, índice nome normalizado de sócio → CNPJ básico → empresas/estabelecimentos. Lote só consulta índice pronto. Sem carregar base inteira na RAM de 24 GB; importador junta somente campos necessários, não pesquisa sócios terceiros. Tamanho exato/arquivos/leiaute não verificados: prever dezenas de GB de disco, medir manifestos e espaço antes de baixar/extrair, não fixar promessa. Nick escolhe preparação e local do snapshot. Refresh explícito por competência mensal, troca atômica, manter data/hash; CPF mascarado nunca desmascarado nem aceito como identidade única. Contrato CSV oficial precisa ser confirmado antes do adapter real; fixtures sintéticas testam contrato interno. |
-| OAB sem captcha | Não verificado nos insumos. Adapter com consulta automatizada somente quando acesso simples for confirmado. Alternativa implementável: link do cadastro e entrada manual de nome/OAB/UF/dados profissionais com URL/data e marcação manual. Não simular disponibilidade nem resolver captcha. |
+| CNPJ por nome de sócio | F13 descreve download completo mensal; não há endpoint nominal assegurado. Proposta: ingestão separada de snapshot oficial em streaming CSV/ZIP para SQLite em disco, índice nome normalizado de sócio → CNPJ básico → empresas/estabelecimentos. Lote só consulta índice pronto. Sem carregar base inteira na RAM de 24 GB; importador junta somente campos necessários, não pesquisa sócios terceiros. Tamanho exato/arquivos/leiaute não verificados: prever dezenas de GB de disco, medir manifestos e espaço antes de baixar/extrair, não fixar promessa. O destino escolhido por Nick é o SSD interno do Studio. O pré-voo considera arquivos compactados, dados temporários, índice SQLite e eventual índice anterior durante a troca. Se o espaço for insuficiente, apresentar a limitação antes da transferência. Refresh explícito por competência mensal, troca atômica, manter data/hash; CPF mascarado nunca desmascarado nem aceito como identidade única. Contrato CSV oficial precisa ser confirmado antes do adapter real; fixtures sintéticas testam contrato interno. |
+| OAB sem captcha | Não verificado nos insumos. Adapter com consulta automatizada somente quando acesso simples for confirmado. Em caso de captcha, aplicar a decisão da §8: registrar a pendência na aba OAB e seguir para o próximo alvo. Nick completa a conferência posteriormente. Não simular disponibilidade nem resolver captcha. |
 | Outros processos | Cruzar somente linhas de Casos/Publicações do workbook já fornecido e resultados da busca web gratuita; não reler cadernos, não chamar DataJud para nomes (F1 não tem partes), não crawler e-SAJ por pessoa. Nome igual significa candidato. Mostrar cobertura parcial e data. Busca sem configuração: apenas workbook, com limitação. |
 | Provedor de contatos | Provedor ainda não escolhido; não inferir que produtos jurídicos F9/F10 fornecem contatos. Exigir documentação de identificadores aceitos (CPF, CNPJ ou nome+cidade/faixa etária), descoberta sem contatos, preço, licença/finalidade e idempotência. CPF-only deixa sem CPF pendente; resposta ambígua exige segunda confirmação. |
 
@@ -198,6 +213,9 @@ Sem rede, com dublês de Hermes (busca e leitura), provedor, registros, relógio
 - rejeitar URL fora da busca e citação não encontrada; aceitar normalização; snippet apenas quando página indisponível;
 - página social com login faz uma tentativa, não segue links, conserva snippet não verificado e segue lote;
 - desconhecidos/não/vazio nunca chegam ao provedor; CPF inválido rejeitado antes de cobrança;
+- testar autorização de gasto separada, primeira rodada sem fornecedor e marcações preservadas. Simular captcha OAB entre dois alvos e atualização posterior via Excel;
+- verificar o resumo inteiro com sentinelas identificadoras em texto, atributos e metadados. Vínculo pendente omite até a faixa de capital. Confirmar o candidato associado libera a faixa somente para seus vínculos documentados.
+- testar descarte marcado, cancelado, confirmado, prévia vencida, falha durante a limpeza e reexecução. Conferir todas as saídas, os casos remanescentes e a numeração estável;
 - múltiplas pessoas do provedor não exibem nem persistem contatos; confirmação específica libera somente uma;
 - URL pública de modelo, redirect e DNS público recusados; servidor indisponível para com URL sanitizada;
 - verificar acusa nome ausente/não listado; truncamento respeita contexto e preserva trechos relevantes;
@@ -211,7 +229,7 @@ Sem rede, com dublês de Hermes (busca e leitura), provedor, registros, relógio
 
 ## 15. Perguntas para advogado
 
-Continuam L1–L10 do documento de 26/10; estas perguntas não presumem autorização jurídica:
+**Decisão do Nick.** Antes da primeira pesquisa com nomes reais, encaminhar ao advogado as questões sobre fontes gratuitas, o envio de nome/cidade à busca externa, a coleta anterior à cessão, o resumo do revisor e a exclusão do lote (L11, L12 e L14). O desenvolvimento com casos fictícios pode avançar. Quando houver fornecedor concreto, revisar compra, licença, retenção e contrato (L13) antes de habilitar o gasto. L15 e L16 orientam a abordagem humana no estágio aplicável. A decisão operacional é abordar devedor ou seu advogado somente depois da cessão.
 - **L11:** Qual base LGPD e quais limites de finalidade/minimização/retenção para reunir capacidade de pagamento e contatos do devedor antes da cessão, incluindo combinação de emprego, QSA e processos?
 - **L12:** Qual base e limites para coletar contatos de credor pessoa física antes da compra?
 - **L13:** Que diligência sobre origem, licença, contratos, papéis LGPD e direitos dos titulares é necessária ao comprar contatos para essa finalidade?
@@ -221,14 +239,14 @@ Continuam L1–L10 do documento de 26/10; estas perguntas não presumem autoriza
 
 ## 16. Pendências para o Nick
 
-1. Aprovar mudanças de regras e encaminhar L11–L16 ao advogado; definir retenção, exclusão e acesso aos dados.
-2. Decidir se a ordem do contato humano muda; obter contatos antes da compra não decide isso.
-3. Escolher provedor: licença/finalidade, preço/orçamento, identificadores e descoberta sem contatos ambíguos; CPF-only deixará casos pendentes.
+1. Revisar o design atualizado. Antes da rodada nominal, obter a avaliação do advogado sobre a etapa gratuita, o resumo e o alcance do descarte, inclusive cópias externas e retenção do Hermes.
+2. Conferir as propostas técnicas A1–A19, em especial as faixas de capital e o modo de confirmar o descarte na prévia.
+3. Quando a rodada gratuita indicar necessidade, selecionar o fornecedor, verificar identificadores, preço e orçamento, e levar o contrato à segunda revisão jurídica.
 4. Na primeira rodada autorizada, confirmar que a cobertura e os limites da busca gratuita do Hermes atendem ao volume desejado. O mecanismo prévio de restrição da §11 é verificação técnica de quem implementar.
 5. Se optar por executar no laptop, validar de lá o túnel e o acesso autenticado. Para execução no Studio, a API local já foi testada.
-6. Escolher local/espaço e preparação do snapshot CNPJ; confirmar leiaute/volume e rotina de atualização antes do adapter real.
-7. Confirmar acesso simples ao cadastro OAB ou aceitar operação manual inicial.
-8. Conferir escolhas minhas A1–A17 e defaults marcados; fazer a primeira execução real pessoalmente, começando com dois casos, e revisar comportamento de páginas sociais.
+6. Antes de preparar o índice no SSD interno do Studio, conferir a competência, o leiaute, os tamanhos e o espaço livre. A primeira carga e as consultas reais ficarão para a implementação aprovada.
+7. Na rodada autorizada, conferir o leiaute da OAB e se os campos da planilha bastam para a conferência manual.
+8. Fazer pessoalmente a primeira rodada gratuita de até dois casos e conferir o comportamento das páginas sociais e a utilidade do resumo do revisor.
 
 ## 17. O que fica com quem implementar
 
