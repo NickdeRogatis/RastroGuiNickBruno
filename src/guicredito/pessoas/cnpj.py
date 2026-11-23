@@ -86,7 +86,7 @@ def prever_espaco(estimativas: Path, indice: Path) -> dict:
 _SCHEMA = """
     CREATE TABLE empresas (base TEXT PRIMARY KEY, nome TEXT NOT NULL, normal TEXT NOT NULL, capital TEXT NOT NULL);
     CREATE TABLE socios (base TEXT NOT NULL, nome TEXT NOT NULL, normal TEXT NOT NULL, origem TEXT NOT NULL);
-    CREATE TABLE estabelecimentos (base TEXT NOT NULL, cnpj TEXT NOT NULL, situacao TEXT NOT NULL, matriz TEXT NOT NULL);
+    CREATE TABLE estabelecimentos (base TEXT NOT NULL, cnpj TEXT NOT NULL, situacao TEXT NOT NULL, matriz TEXT NOT NULL, origem TEXT NOT NULL);
     CREATE TABLE manifesto (registro TEXT NOT NULL);
 """
 _INDICES = """
@@ -98,7 +98,7 @@ _INDICES = """
 _INSERTS = {
     "empresas": "INSERT INTO empresas VALUES (?,?,?,?)",
     "socios": "INSERT INTO socios VALUES (?,?,?,?)",
-    "estabelecimentos": "INSERT INTO estabelecimentos VALUES (?,?,?,?)",
+    "estabelecimentos": "INSERT INTO estabelecimentos VALUES (?,?,?,?,?)",
 }
 
 
@@ -124,7 +124,7 @@ def _registros(bruto, tabela, layout, origem):
                 if cnpj and (not re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", cnpj) or cnpj[:8] != base):
                     raise ValueError("CNPJ do estabelecimento incompatível.")
                 situacao = (layout.situacoes or {}).get(campos["situacao"], campos["situacao"])
-                yield base, cnpj, situacao, campos.get("matriz", "")
+                yield base, cnpj, situacao, campos.get("matriz", ""), "" if cnpj else f"{origem}/{n}"
             elif tabela == "empresas":
                 yield base, campos["nome"], normalizar(campos["nome"]), campos["capital_social"]
             else:
@@ -252,7 +252,7 @@ class IndiceCNPJ:
                     else:
                         campo, valor = "e.normal", normalizar(alvo["nome"])
                     linhas = con.execute(f"""
-                        SELECT e.*,u.cnpj,u.situacao FROM empresas e LEFT JOIN estabelecimentos u ON e.base=u.base
+                        SELECT e.*,u.cnpj,u.situacao,u.origem FROM empresas e LEFT JOIN estabelecimentos u ON e.base=u.base
                         WHERE {campo}=? ORDER BY e.base,u.cnpj
                     """, (valor,))
                     return [_candidato(alvo, u, u, meta, "") for u in linhas]
@@ -265,7 +265,8 @@ def _candidato(alvo, empresa, unidade, meta, origem):
     categoria = "participação empresarial" if origem else "cadastro empresarial"
     cnpj = unidade["cnpj"] if unidade else ""
     situacao = unidade["situacao"] if unidade else ""
-    chave = identificador(alvo["id"], "CNPJ", meta["competencia"], empresa["base"], origem or cnpj or "")
+    chave = identificador(alvo["id"], "CNPJ", meta["competencia"], empresa["base"],
+                         origem or cnpj or unidade["origem"] or "")
     trecho = " | ".join(str(x or "") for x in (meta["competencia"], empresa["base"], empresa["nome"],
                                                  empresa["pessoa"] if origem else "", empresa["capital"], situacao))
     eid = identificador(chave, trecho)

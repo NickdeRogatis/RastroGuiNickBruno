@@ -112,3 +112,14 @@ def test_recusa_snapshot_com_partes_faltantes(snapshot):
     with pytest.raises(ValueError, match="incompleto"):
         preparar_cnpj(*snapshot)
     assert not snapshot[-1].exists()
+
+
+def test_pj_sem_inscricao_completa_mantem_estabelecimentos_distintos(snapshot):
+    esquema = json.loads(snapshot[1].read_text())
+    del esquema["colunas"]["estabelecimentos"]["cnpj"]
+    snapshot[1].write_text(json.dumps(esquema))
+    preparar_cnpj(*snapshot)
+    pj = {"id": "pj", "papel": "credor", "tipo": "PJ", "nome": "BANCO EXEMPLO S.A."}
+    achados = IndiceCNPJ(snapshot[-1]).consultar(pj)
+    assert {a["situacao"] for a in achados} == {"ATIVA", "BAIXADA"}
+    assert len({a["id"] for a in achados}) == 2
