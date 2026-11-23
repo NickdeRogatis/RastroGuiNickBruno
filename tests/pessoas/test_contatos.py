@@ -240,3 +240,16 @@ def test_prevenir_troca_de_cpf_apos_cobranca_com_provedor_desativado():
     with pytest.raises(ValueError, match="Identidade"):
         processar(c, d, None, lambda: None)
     assert len(fonte.chamadas) == 2
+
+
+def test_conciliar_encerrando_pedido_legado_sem_chamar_fornecedor():
+    from guicredito.pessoas.contatos import conciliar_pedido
+
+    c, d, fonte = caso(), decisoes(), Provedor()
+    c["pedidos"] = {"c": {"estado": "incerto", "requisicao": "chave-antiga"}}
+    with pytest.raises(ValueError, match="sem identificação"):
+        conciliar_pedido(c, d, "chave-antiga", "nao_executado")
+    conciliar_pedido(c, d, "chave-antiga", "encerrar")
+    processar(c, d, fonte, lambda: None)
+    assert c["pedidos"]["c"]["estado"] == "encerrado"
+    assert fonte.chamadas == []
