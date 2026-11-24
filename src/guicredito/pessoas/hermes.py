@@ -39,7 +39,7 @@ from urllib.parse import urlsplit
 
 from guicredito.djen.texto import normalizar
 from .http import (
-    MOTIVO_POLITICA, ErroGateway, PoliticaIndisponivel, Ritmo, TransporteLocal,
+    MOTIVO_POLITICA, ErroGateway, LeituraIndisponivel, PoliticaIndisponivel, Ritmo, TransporteLocal,
     TransportePublico, validar_gateway_url,
 )
 
@@ -320,7 +320,7 @@ class ClienteHermes:
         payload = {"model": self.config.hermes_modelo, "input": entrada, "store": False, "instructions": instrucoes}
         try:
             return self.transporte.enviar_restrito(base + "/responses", payload, modo=modo, argumentos=argumentos)
-        except PoliticaIndisponivel:
+        except (PoliticaIndisponivel, LeituraIndisponivel):
             raise
         except (OSError, ErroGateway):
             raise ErroGateway("Pedido ao gateway interrompido; verificar antes de repetir") from None

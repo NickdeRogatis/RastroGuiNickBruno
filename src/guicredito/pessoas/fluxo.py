@@ -171,29 +171,52 @@ def _consulta(caso, alvo, fonte):
 
 
 # Executa a pesquisa Hermes para o alvo elegível, salvando o estado e preservando resultados parciais.
-def _web(caso, alvo, cliente, http, gravar):
+def _web(caso, alvo, cliente, http, gravar, retomar_leituras=False):
     if alvo["tipo"] == "PJ" and alvo["papel"] == "devedor":
         return
     consulta = _consulta(caso, alvo, "Hermes")
     if consulta["estado"] in {"sem_resultados", "consultado"}:
         return
-    if consulta["estado"] == "incerto":
+    registro = next((q for q in caso["consultas"] if q["alvo_id"] == alvo["id"]
+                     and q["fonte"] == "web_search" and isinstance(q.get("urls"), list)), None)
+    if consulta["estado"] in ("incerto", "leitura_pendente") and registro is None:
         raise ValueError("Pesquisa interrompida após possível envio. Confira o lote antes de nova consulta.")
+    if consulta["estado"] == "leitura_pendente" and not retomar_leituras:
+        raise ValueError("Busca salva. Use --retomar-leituras para continuar sem repetir a busca.")
     if cliente is None:
-        consulta.update(estado="nao_configurado", motivo="Busca não configurada.")
+        if registro is None:
+            consulta.update(estado="nao_configurado", motivo="Busca não configurada.")
         return
-    consulta.update(estado="incerto", motivo="Pesquisa iniciada.", data=_agora())
-    gravar()
-    # Mescla candidatos, evidências, contatos e consultas da resposta ao caso sem duplicar IDs.
+    if registro is None:
+        consulta.update(estado="incerto", motivo="Pesquisa iniciada.", data=_agora())
+        gravar()
+
+    def guardar_busca(q):
+        _unir(caso["consultas"], [q])
+        consulta.update(estado="leitura_pendente", motivo="Busca salva. Leitura pendente.", data=_agora())
+        gravar()
+
     def incorporar(resposta):
         for k in ("candidatos", "evidencias", "contatos"):
             _unir(caso[k], resposta.get(k, []))
-        _unir(caso["consultas"], resposta["consultas"])
+        por_id = {q["id"]: q for q in caso["consultas"]}
+        for q in resposta["consultas"]:
+            if q["id"] in por_id:
+                por_id[q["id"]].update(q)
+            else:
+                caso["consultas"].append(q)
+            if q.get("concluida"):
+                caso["consultas"][:] = [r for r in caso["consultas"]
+                    if not (r["fonte"] == "leitura Hermes" and r["alvo_id"] == alvo["id"]
+                            and r.get("url") == q.get("url") and r["estado"] == "interrompido")]
+
+    prontas = {q["url"] for q in caso["consultas"] if q["alvo_id"] == alvo["id"] and q.get("concluida")}
     try:
-        resposta = pesquisar_web(alvo, cliente, http)
+        resposta = pesquisar_web(alvo, cliente, http, registrar_busca=guardar_busca,
+                                 registro=registro, paginas_concluidas=prontas)
     except ErroPesquisaParcial as erro:
         incorporar(erro.parcial)
-        raise ValueError("Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.") from None
+        raise ValueError("Busca salva. Use --retomar-leituras para continuar sem repetir a busca.") from None
     except Exception:
         raise ValueError("Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.") from None
     incorporar(resposta)
@@ -203,7 +226,7 @@ def _web(caso, alvo, cliente, http, gravar):
 
 
 # Cria ou retoma o lote, coordena as pesquisas dos casos ativos e salva resultados e conferências.
-def pesquisar(entrada, config, servicos, saida):
+def pesquisar(entrada, config, servicos, saida, *, retomar_leituras=False):
     from .cnpj import IndiceCNPJ
     from .oab import consulta_oab
     from .hermes import criar_servicos_web
@@ -244,7 +267,7 @@ def pesquisar(entrada, config, servicos, saida):
             for caso in ativos:
                 for alvo in caso["alvos"]:
                     _registros(caso, alvo, indice, oab)
-                    _web(caso, alvo, cliente, http, salvar)
+                    _web(caso, alvo, cliente, http, salvar, retomar_leituras)
         except (ValueError, ErroGateway):
             salvar()
             raise

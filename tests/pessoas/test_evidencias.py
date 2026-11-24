@@ -271,7 +271,13 @@ def test_reabrir_lote_apos_erro_de_leitura_preserva_recorte_sem_reenviar(tmp_pat
             pesquisar(entrada, cfg, {"hermes": leitor, "http": http}, lote)
         consultas = json.loads((lote / numero / "consultas.json").read_text())
         assert any(q.get("id_chamada") == "call_teste" and q.get("id_resposta") == "resp_teste" for q in consultas)
-        assert any(q["estado"] == "incerto" for q in consultas)
+        assert any(q["estado"] == "leitura_pendente" for q in consultas)
         ev, = json.loads((lote / numero / "evidencias.json").read_text())
         assert ev["data"] == DATA and (lote / numero / ev["arquivo"]).read_text() == "João Exemplo"
     assert len(leitor.pesquisas) == 1 and http.chamadas == [URL, segunda]
+    leitor.propor = lambda texto, alvo: []
+    pesquisar(entrada, cfg, {"hermes": leitor, "http": http}, lote, retomar_leituras=True)
+    assert len(leitor.pesquisas) == 1 and http.chamadas == [URL, segunda, segunda]
+    consultas = json.loads((lote / numero / "consultas.json").read_text())
+    assert any(q["fonte"] == "Hermes" and q["estado"] == "consultado" for q in consultas)
+    assert not any(q["estado"] == "interrompido" for q in consultas)

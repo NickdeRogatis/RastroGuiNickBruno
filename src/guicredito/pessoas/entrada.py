@@ -211,11 +211,16 @@ def _cruzar(wb, casos, data):
                             _referencia(caso, alvo, numero, aba, quando)
 
 
-def ler_entrada(selecao: Path, aprofundamento: Path, planilha: Path) -> Entrada:
+def ler_entrada(selecao: Path, aprofundamento: Path, planilha: Path, *, escopo="todos") -> Entrada:
     sel = ler_selecao(selecao)
     if sel.get("versao") != 1:
         raise ValueError("Versão de seleção inválida.")
     hashes = {"selecao": _hash(selecao), "planilha": _hash(planilha)}
+    papeis_credor = {"credor": {"credor"}, "advogados-do-credor": {"advogado"}, "polo-credor": {"credor", "advogado"}}
+    if escopo != "todos":
+        if escopo not in papeis_credor:
+            raise ValueError("Escopo de alvos inválido.")
+        hashes["escopo_alvos"] = hashlib.sha256(escopo.encode()).hexdigest()
     manifesto = aprofundamento / "selecao.json"
     if manifesto.is_symlink():
         raise ValueError("Caminho do manifesto inválido.")
@@ -255,6 +260,8 @@ def ler_entrada(selecao: Path, aprofundamento: Path, planilha: Path) -> Entrada:
         for numero, caso in casos.items():
             partes = _capa(aprofundamento, caso, hashes)
             caso["alvos"] = extrair_alvos(partes, pubs[numero], caso)
+            if escopo != "todos":
+                caso["alvos"] = [a for a in caso["alvos"] if a["lado"] == "credor" and a["papel"] in papeis_credor[escopo]]
             classe = normalizar(caso.pop("classe"))
             caso["fase"] = next((f for f in ("cumprimento de sentenca", "execucao", "monitoria")
                                  if f in classe), "não informada")

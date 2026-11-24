@@ -19,6 +19,8 @@ O comando `pesquisar` recebe quatro caminhos. Em `--selecao`, indique o JSON de 
 
 Com `PESSOAS_BUSCA` vazia, o programa usa apenas os arquivos locais e registra a indisponibilidade das fontes opcionais. A passagem gratuita nunca chama o fornecedor de contatos. Salve e feche o Excel antes de cada comando. Para atualizar os relatórios após uma edição, repita `pesquisar` com os mesmos caminhos.
 
+Para restringir um lote, use `pesquisar --alvos advogados-do-credor`, `--alvos credor` ou `--alvos polo-credor`. Cada escopo usa sua própria pasta de saída. A busca concluída grava os IDs e as URLs antes da primeira leitura. Se uma página interromper a leitura, feche a planilha e repita o comando na mesma pasta com `--retomar-leituras`. O programa retoma as páginas pendentes e preserva as evidências anteriores. Uma busca cujo envio continua incerto e sem retorno salvo exige conferência manual.
+
 | Arquivo | Uso |
 |---|---|
 | `pessoas.xlsx` | Planilha privada. Em **Candidatos**, marque **Confirmado** e, separadamente, **Autorizar consulta paga** por candidato. Se inserir um CPF, use uma célula de texto para preservar zeros iniciais. |
@@ -34,7 +36,7 @@ O ensaio **impessoal anterior** no Studio registrou Hermes `v0.21.7+500.g8f81791
 
 Configure no ambiente da aplicação `PESSOAS_HERMES_URL`, `PESSOAS_HERMES_MODELO=hermes-agent` e a credencial dedicada em `PESSOAS_HERMES_KEY`. Caminho da chave no Studio: `~/.hermes/.env` (campo `API_SERVER_KEY`). A aplicação lê suas próprias variáveis de ambiente ou seu próprio arquivo local `.env`. Mantenha o arquivo com permissão exclusiva para o usuário. O nome do modelo é obrigatório no diagnóstico. O contexto configurado é de 262144 tokens, o tempo limite do gateway é de 180 s e a pausa padrão é de 5 s. Os ajustes são `PESSOAS_HERMES_CONTEXTO`, `PESSOAS_HERMES_TIMEOUT` e `PESSOAS_INTERVALO`.
 
-No Terminal do PyCharm no Studio, a partir da raiz do projeto, este ensaio consulta “Example Domain” pela rota do Hermes e lê a página pública de exemplo. Mostra os IDs, o backend, as URLs e o resultado da leitura. A chave é lida em memória do arquivo indicado.
+No Terminal do PyCharm no Studio, a partir da raiz do projeto, este ensaio consulta “Example Domain” pela rota do Hermes e testa a leitura. Se a página pública de exemplo mudar, a leitura usa um trecho fictício identificado na saída. Mostra os IDs, o backend, as URLs e o resultado da leitura. A chave é lida em memória do arquivo indicado.
 
 ```sh
 PYTHONPATH=src .venv/bin/python integracoes/hermes/testar.py --env-hermes ~/.hermes/.env

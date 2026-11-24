@@ -42,8 +42,8 @@ from urllib.parse import urlsplit
 
 from guicredito.djen.texto import normalizar
 from .entrada import identificador
-from .hermes import CATEGORIAS, INDICIOS
-from .http import ErroGateway, rede_social
+from .hermes import CATEGORIAS, INDICIOS, ResultadoBusca
+from .http import ErroGateway, FALHAS_DE_LEITURA, LeituraIndisponivel, rede_social
 
 
 # Padrões textuais usados na ocultação, filtragem e extração. Reconhecem formatos,
@@ -301,7 +301,7 @@ def _preservar_barreira(saida, alvo, item, pagina):
 # do resultado. Registra consultas mesmo quando não há achados, filtra as fontes
 # antes do download e valida propostas antes de incorporá-las. Falhas na chamada
 # de leitura geram ErroPesquisaParcial com o progresso, sem repetir o pedido.
-def pesquisar_web(alvo: dict, cliente, http) -> dict:
+def pesquisar_web(alvo: dict, cliente, http, *, registrar_busca=None, registro=None, paginas_concluidas=()) -> dict:
     saida = {"candidatos": [], "evidencias": [], "consultas": [], "contatos": []}
     consulta = dict(id=identificador(alvo["id"], "web_search"), alvo_id=alvo["id"], fonte="web_search",
                     data=_agora(), versao=1, estado="nao_consultado", motivo="alvo fora do escopo da busca")
@@ -314,16 +314,27 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
         return saida
     # O gateway precisa anunciar a política da rota dedicada antes de receber a consulta.
     cliente.exigir_politica()
-    busca = cliente.buscar(pedido)
-    consulta.update(estado="consultado" if busca.itens else "sem_resultados", motivo="",
-                    id_resposta=busca.id_resposta, id_chamada=busca.id_chamada, backend=busca.backend,
-                    ferramenta="web_search", limite=busca.limite, paginacao="uma página", quantidade=len(busca.itens))
-    # A mesma URL pode aparecer com snippets diferentes. Baixa-se uma vez,
-    # mas conservam-se essas referências para o tratamento de páginas indisponíveis.
+    if registro is None:
+        busca = cliente.buscar(pedido)
+        itens = busca.itens
+        consulta.update(estado="consultado" if itens else "sem_resultados", motivo="",
+                        id_resposta=busca.id_resposta, id_chamada=busca.id_chamada, backend=busca.backend,
+                        ferramenta="web_search", limite=busca.limite, paginacao="uma página", quantidade=len(itens),
+                        urls=list(dict.fromkeys(item.url for item in itens if _url_permitida(item.url))))
+        if registrar_busca is not None:
+            registrar_busca(dict(consulta))
+    else:
+        if registro["id"] != consulta["id"] or registro["alvo_id"] != alvo["id"]:
+            raise ValueError("Registro de busca divergente.")
+        consulta.update(registro)
+        # O lote conserva URLs e IDs. Snippets brutos não são necessários para retomar a leitura.
+        itens = [ResultadoBusca(url, "", "") for url in consulta["urls"]]
     por_url = {}
-    for item in busca.itens:
+    for item in itens:
         por_url.setdefault(item.url, []).append(item)
     for url, resultados in por_url.items():
+        if url in paginas_concluidas:
+            continue
         pagina_q = dict(id=identificador(alvo["id"], "pagina", url), alvo_id=alvo["id"], fonte="página pública",
                         data=consulta["data"], versao=1, estado="nao_consultado", motivo="URL fora do escopo")
         saida["consultas"].append(pagina_q)
@@ -334,8 +345,10 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
         if pagina.estado != "consultado":
             for referencia_busca in dict.fromkeys(resultados):
                 _preservar_barreira(saida, alvo, referencia_busca, pagina)
+            pagina_q["concluida"] = True
             continue
         if not _contem(pagina.texto, alvo["nome"]):
+            pagina_q["concluida"] = True
             continue
         # O modelo recebe uma referência mínima e texto com padrões sensíveis
         # ocultados. A página original permanece disponível para validar os trechos.
@@ -345,16 +358,19 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
             texto = _TELEFONE.sub("[telefone omitido]", _EMAIL.sub("[email omitido]", texto))
         try:
             propostas = cliente.propor(texto, referencia)
-        except Exception:
+        except Exception as erro:
+            motivo = (str(erro) if isinstance(erro, LeituraIndisponivel) and str(erro) in FALHAS_DE_LEITURA.values()
+                      else "Falha de leitura ou resposta incompatível do gateway.")
             # A busca e leituras anteriores podem ter produzido dados úteis.
             # Preserva-os na exceção e registra a leitura interrompida sem expor
             # a mensagem original do erro ou reenviar um pedido possivelmente executado.
             saida["consultas"].append(dict(id=identificador(alvo["id"], "leitura", url), alvo_id=alvo["id"],
                                            fonte="leitura Hermes", url=url, estado="interrompido",
-                                           motivo="leitura incompleta; sem reenvio", data=_agora(), versao=1))
+                                           motivo=motivo, data=_agora(), versao=1))
             raise ErroPesquisaParcial(saida) from None
         for proposta in propostas:
             ev = validar_achado(proposta, resultados, {url: pagina})
             if ev:
                 _adicionar(saida, alvo, proposta, ev)
+        pagina_q["concluida"] = True
     return saida

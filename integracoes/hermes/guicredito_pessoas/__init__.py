@@ -10,6 +10,11 @@ POLITICA = "guicredito-parallel-anon-v1"
 MODELO_API = "hermes-agent"
 BASE_LOCAL = "http://127.0.0.1:18434/v1"
 MAX_BYTES = 5_000_000
+SESSAO_PARALLEL = uuid.uuid4().hex
+
+
+class FalhaDeLeitura(ValueError):
+    pass
 
 
 def objeto_unico(pares):
@@ -39,9 +44,12 @@ def executar(pedido, chamar_modelo, buscar):
     msg = escolha["message"]
     calls = msg.get("tool_calls") or []
     if pedido["modo"] == "leitura":
-        if (calls or msg.get("function_call") or escolha["finish_reason"] != "stop"
-                or not isinstance(msg.get("content"), str) or not msg["content"].strip()):
-            raise ValueError("Leitura incompleta ou com ferramenta")
+        if calls or msg.get("function_call"):
+            raise FalhaDeLeitura("ferramenta_na_leitura")
+        if escolha["finish_reason"] == "length":
+            raise FalhaDeLeitura("leitura_truncada")
+        if escolha["finish_reason"] != "stop" or not isinstance(msg.get("content"), str) or not msg["content"].strip():
+            raise FalhaDeLeitura("leitura_incompleta")
         saida = [{"type": "message", "role": "assistant",
                   "content": [{"type": "output_text", "text": msg["content"]}]}]
     else:
@@ -72,7 +80,7 @@ def buscar_anonimo(query):
     if PARALLEL_MCP_URL != "https://search.parallel.ai/mcp":
         raise ValueError("Endpoint anônimo do Hermes mudou")
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "web_search",
-            "arguments": {"objective": query, "search_queries": [query], "session_id": uuid.uuid4().hex}}}
+            "arguments": {"objective": query, "search_queries": [query], "session_id": SESSAO_PARALLEL}}}
     # Cliente novo e anônimo. Nunca importa chaves do gateway, cookies, proxy ou credenciais de ambiente.
     with httpx.Client(trust_env=False, follow_redirects=False, timeout=30) as client:
         with client.stream("POST", PARALLEL_MCP_URL, json=body,
@@ -123,12 +131,22 @@ def chamar_modelo(instructions, entrada, modo):
     if modo == "busca":
         opcoes = {"tools": [{"type": "function", "function": WEB_SEARCH_SCHEMA}],
                   "tool_choice": {"type": "function", "function": {"name": "web_search"}}}
+    else:
+        texto = {"type": "string"}
+        campos = {"nome": texto, "url": texto, "trecho": texto,
+                  "categoria": {"type": "string", "enum": ["identidade", "emprego", "processo", "contato_profissional"]},
+                  "indicios": {"type": "object", "additionalProperties": False,
+                               "properties": dict.fromkeys(("cidade", "empregador", "faixa_etaria"), texto)}}
+        schema = {"type": "array", "items": {"type": "object", "properties": campos,
+                  "additionalProperties": False, "required": list(campos)}}
+        opcoes = {"response_format": {"type": "json_schema", "json_schema": {"name": "achados", "schema": schema}},
+                  "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
     mensagens = [{"role": "system", "content": instructions}, {"role": "user", "content": entrada}]
     # O próprio plugin do gateway despacha a ferramenta. O SDK do modelo só devolve sua decisão.
     with OpenAI(base_url=BASE_LOCAL, api_key=key, max_retries=0,
                 http_client=httpx.Client(trust_env=False, follow_redirects=False, timeout=110)) as llm:
         resp = llm.chat.completions.create(model=model, messages=mensagens, temperature=0,
-                                           max_tokens=2048, **opcoes)
+                                           max_tokens=4096 if modo == "leitura" else 2048, **opcoes)
     if len(resp.choices) != 1:
         raise ValueError("Esperada uma única escolha do modelo")
     return resp.choices[0].model_dump()
@@ -172,6 +190,8 @@ def registrar_rotas(app, adapter):
         tarefa = asyncio.create_task(turno(pedido))
         try:
             return web.json_response(await asyncio.shield(tarefa))
+        except FalhaDeLeitura as erro:
+            raise web.HTTPBadGateway(text="Leitura interrompida", headers={"X-Guicredito-Erro": str(erro)}) from None
         except Exception:
             # Nunca propaga prompts, corpos do provedor, chaves ou detalhes de conexão.
             raise web.HTTPBadGateway(text="Turno restrito não concluído") from None

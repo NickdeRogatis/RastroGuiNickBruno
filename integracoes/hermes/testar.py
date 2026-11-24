@@ -33,11 +33,18 @@ def main():
     print(f"Resposta {busca.id_resposta} | chamada {busca.id_chamada}")
     for item in busca.itens:
         print(item.url)
+    testar_leitura(agente, paginas)
+
+
+def testar_leitura(agente, paginas):
     fonte = paginas.baixar("https://example.org/")
     if fonte.estado != "consultado":
         raise SystemExit(f"Busca concluída. Leitura pendente: {fonte.motivo}")
-    achados = agente.propor(fonte.texto, {"nome": "Example Domain", "papel": "credor", "url": fonte.url})
-    print(f"Leitura de {fonte.url} concluída sem ferramentas. Propostas: {len(achados)}.")
+    # Conteúdo controlado garante uma chamada de leitura mesmo se a página pública mudar.
+    texto = fonte.texto if "Example Domain" in fonte.texto else "Example Domain é uma organização fictícia neste ensaio."
+    origem = fonte.url if texto == fonte.texto else "https://example.invalid/fonte-ficticia"
+    achados = agente.propor(texto, {"nome": "Example Domain", "papel": "credor", "url": origem})
+    print(f"Leitura de {origem} concluída sem ferramentas. Propostas: {len(achados)}.")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,8 @@ def _parser():
     subs = parser.add_subparsers(dest="comando", required=True)
     subs.add_parser("verificar", help="Conferir configuração e ID anunciado pelo gateway.")
     pesquisa = subs.add_parser("pesquisar", help="Executar a etapa gratuita.")
+    pesquisa.add_argument("--alvos", choices=("todos", "credor", "advogados-do-credor", "polo-credor"), default="todos")
+    pesquisa.add_argument("--retomar-leituras", action="store_true", help="Ler as URLs salvas sem repetir a busca.")
     for campo in ("selecao", "aprofundamento", "planilha", "saida"):
         pesquisa.add_argument("--" + campo, type=Path, required=True)
     subs.add_parser("contatos", help="Consultar apenas os pedidos autorizados.").add_argument("--lote", type=Path, required=True)
@@ -93,8 +95,8 @@ def _comando(a, cfg, servicos):
         return 0
 
     from .entrada import ler_entrada
-    entrada = ler_entrada(a.selecao, a.aprofundamento, a.planilha)
-    dados = fluxo.pesquisar(entrada, cfg, servicos, a.saida)
+    entrada = ler_entrada(a.selecao, a.aprofundamento, a.planilha, escopo=a.alvos)
+    dados = fluxo.pesquisar(entrada, cfg, servicos, a.saida, retomar_leituras=a.retomar_leituras)
     casos = dados["casos"]
     print(f"Casos: {len(casos)}. Candidatos: {sum(len(c['candidatos']) for c in casos)}.")
     if not cfg.busca:
@@ -135,6 +137,7 @@ def main(argv=None, servicos=None):
             "Resposta do fornecedor inválida para a conciliação.", "Resultado de conciliação ou autorização incompatível.",
             "Pedido incerto. Conciliação manual necessária.", "Índice CNPJ indisponível.",
             "Pesquisa interrompida após possível envio. Confira o lote antes de nova consulta.",
+            "Busca salva. Use --retomar-leituras para continuar sem repetir a busca.",
             "Falha na pesquisa Hermes. Resultado incerto. Lote parcial preservado.",
             "Linha desconhecida, repetida ou alterada na planilha.", "Marcação inválida.",
             "Espaço insuficiente ou indeterminado para o índice CNPJ.",

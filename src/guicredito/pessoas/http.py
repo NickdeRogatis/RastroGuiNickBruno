@@ -33,6 +33,17 @@ class ErroGateway(RuntimeError):
     """Diagnóstico que pode ser exibido sem o corpo ou a URL da fonte."""
 
 
+FALHAS_DE_LEITURA = {
+    "ferramenta_na_leitura": "O modelo solicitou ferramenta durante a leitura.",
+    "leitura_truncada": "O modelo atingiu o limite de saída durante a leitura.",
+    "leitura_incompleta": "O modelo devolveu uma leitura incompleta.",
+}
+
+
+class LeituraIndisponivel(ErroGateway):
+    pass
+
+
 class PoliticaIndisponivel(ErroGateway):
     pass
 
@@ -117,8 +128,30 @@ class _FalhaHTTP(Exception):
     pass
 
 
+def _ler_resposta(resposta, max_bytes, restrita=False):
+    if 300 <= resposta.status < 400:
+        raise _FalhaHTTP("redirecionamento")
+    if not 200 <= resposta.status < 300:
+        motivo = resposta.getheader("X-Guicredito-Erro")
+        if restrita and motivo in FALHAS_DE_LEITURA:
+            raise LeituraIndisponivel(FALHAS_DE_LEITURA[motivo])
+        raise _FalhaHTTP(f"HTTP {resposta.status}")
+    tamanho = resposta.getheader("Content-Length")
+    if tamanho is not None and int(tamanho) > max_bytes:
+        raise _FalhaHTTP("tamanho excedido")
+    if resposta.getheader("Content-Encoding", "identity").lower() != "identity":
+        raise _FalhaHTTP("codificação não suportada")
+    corpo = resposta.read(max_bytes + 1)
+    if len(corpo) > max_bytes:
+        raise _FalhaHTTP("tamanho excedido")
+    if tamanho is not None and len(corpo) != int(tamanho):
+        raise _FalhaHTTP("conteúdo incompleto")
+    return corpo, resposta.headers
+
+
+
 # Executa um GET no IP validado, verifica TLS e rejeita redirecionamentos e respostas fora dos limites.
-def _obter(destino, conectar, timeout, max_bytes, headers, corpo_pedido=None):
+def _obter(destino, conectar, timeout, max_bytes, headers, corpo_pedido=None, prova=None):
     partes, porta, ip = destino
     host = partes.hostname.encode("idna").decode("ascii")
     # HTTPConnection não recebe a URL nem credenciais de proxy. Fixar o socket
@@ -132,26 +165,23 @@ def _obter(destino, conectar, timeout, max_bytes, headers, corpo_pedido=None):
             contexto = ssl.create_default_context(cafile=certifi.where())
             sock = contexto.wrap_socket(sock, server_hostname=host)
         conexao.sock = sock
+        conexao.auto_open = False
+        if prova is not None:
+            caminho, contrato = prova
+            try:
+                conexao.request("GET", caminho, headers=headers)
+                resposta = conexao.getresponse()
+                dados, _ = _ler_resposta(resposta, 2048)
+                if resposta.will_close or conexao.sock is not sock or json.loads(dados) != contrato:
+                    raise PoliticaIndisponivel(MOTIVO_POLITICA)
+            except (_FalhaHTTP, ValueError, OSError, http.client.HTTPException):
+                raise PoliticaIndisponivel(MOTIVO_POLITICA) from None
         alvo = partes.path or "/"
         if partes.query:
             alvo += "?" + partes.query
         conexao.request("GET" if corpo_pedido is None else "POST", alvo, body=corpo_pedido, headers=headers)
         resposta = conexao.getresponse()
-        if 300 <= resposta.status < 400:
-            raise _FalhaHTTP("redirecionamento")
-        if not 200 <= resposta.status < 300:
-            raise _FalhaHTTP(f"HTTP {resposta.status}")
-        tamanho = resposta.getheader("Content-Length")
-        if tamanho is not None and int(tamanho) > max_bytes:
-            raise _FalhaHTTP("tamanho excedido")
-        if resposta.getheader("Content-Encoding", "identity").lower() != "identity":
-            raise _FalhaHTTP("codificação não suportada")
-        corpo = resposta.read(max_bytes + 1)
-        if len(corpo) > max_bytes:
-            raise _FalhaHTTP("tamanho excedido")
-        if tamanho is not None and len(corpo) != int(tamanho):
-            raise _FalhaHTTP("conteúdo incompleto")
-        return corpo, resposta.headers
+        return _ler_resposta(resposta, max_bytes, restrita=prova is not None)
     finally:
         conexao.close()
         sock.close()
@@ -210,8 +240,12 @@ class TransporteLocal:
             if payload is not None:
                 headers["Content-Type"] = "application/json"
                 dados = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+            # A prova decisiva viaja pelo mesmo socket do POST. Se o gateway reiniciar,
+            # a conexão não reabre e a nova instância nunca recebe o payload antigo.
+            prova = ("/v1/guicredito/policy", {"policy": POLITICA_PILOTO, "model": self._config.hermes_modelo})
             with self._ritmo.requisicao():
-                corpo, _ = _obter(destino, self._conectar, self._config.hermes_timeout, 5_000_000, headers, dados)
+                corpo, _ = _obter(destino, self._conectar, self._config.hermes_timeout, 5_000_000,
+                                  headers, dados, prova if dados is not None else None)
             resposta = json.loads(corpo)
             if isinstance(resposta, dict):
                 return resposta

@@ -44,8 +44,8 @@ def test_pesquisar_informa_relatorio_sem_divulgar_a_pasta(tmp_path, monkeypatch,
     from guicredito.pessoas import entrada, fluxo
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(entrada, "ler_entrada", lambda *_: None)
-    monkeypatch.setattr(fluxo, "pesquisar", lambda *_: {"casos": []})
+    monkeypatch.setattr(entrada, "ler_entrada", lambda *_, **__: None)
+    monkeypatch.setattr(fluxo, "pesquisar", lambda *_, **__: {"casos": []})
     assert main(["pesquisar", "--selecao", "selecao", "--aprofundamento", "capas",
                  "--planilha", "entrada.xlsx", "--saida", "NOME_PRIVADO_SENTINELA"]) == 0
     out = capsys.readouterr().out

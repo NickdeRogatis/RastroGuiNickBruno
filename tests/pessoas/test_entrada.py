@@ -128,3 +128,14 @@ def test_comarca_do_processo_nao_atribui_cidade_a_pessoas(entradas):
     entrada = ler_entrada(*entradas)
     assert entrada.casos[0].get("comarca") == "Cidade Exemplo"
     assert all(not alvo.get("cidade") for alvo in entrada.alvos)
+
+
+@pytest.mark.parametrize("escopo", ["advogados-do-credor", "credor", "polo-credor"])
+def test_escopo_do_polo_preserva_hash_e_exclui_outros(entradas, escopo):
+    selecao, pasta, planilha = entradas
+    completo = ler_entrada(selecao, pasta, planilha)
+    escolhido = ler_entrada(selecao, pasta, planilha, escopo=escopo)
+    assert escolhido.hashes != completo.hashes
+    papeis = {"credor"} if escopo == "credor" else {"advogado"} if escopo == "advogados-do-credor" else {"credor","advogado"}
+    assert escolhido.alvos == [a for a in completo.alvos if a["lado"] == "credor" and a["papel"] in papeis]
+    assert not any(c["candidatos"] for c in escolhido.casos)

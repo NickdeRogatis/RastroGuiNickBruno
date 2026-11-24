@@ -1,3 +1,4 @@
+import io
 import json
 
 import pytest
@@ -7,6 +8,15 @@ from tests.pessoas.test_http import Conexao, http
 from tests.pessoas.test_hermes import config
 
 
+class SocketDoTurno(Conexao):
+    def __init__(self, *respostas):
+        super().__init__("127.0.0.1", b"")
+        self.respostas = iter(respostas)
+
+    def makefile(self, *args):
+        return io.BytesIO(next(self.respostas))
+
+
 def test_capacidade_e_post_exclusivos_do_plugin(tmp_path):
     from guicredito.pessoas.http import POLITICA_PILOTO
     from contextlib import nullcontext
@@ -14,7 +24,7 @@ def test_capacidade_e_post_exclusivos_do_plugin(tmp_path):
 
     corpo = {"policy": POLITICA_PILOTO, "model": "hermes-agent"}
     probe = Conexao("127.0.0.1", http(json.dumps(corpo).encode()))
-    post = Conexao("127.0.0.1", http(b'{"id":"resp-1"}'))
+    post = SocketDoTurno(http(json.dumps(corpo).encode()), http(b'{"id":"resp-1"}'))
     sockets = iter([probe, post])
     tx = TransporteLocal(config(tmp_path), conectar=lambda *_: next(sockets),
                          ritmo=SimpleNamespace(requisicao=nullcontext))
@@ -25,7 +35,8 @@ def test_capacidade_e_post_exclusivos_do_plugin(tmp_path):
     assert resposta["id"] == "resp-1"
     assert b'GET /v1/guicredito/policy ' in probe.enviados and b'FICTICIO' not in probe.enviados
     assert b'POST /v1/guicredito/responses ' in post.enviados
-    assert json.loads(post.enviados.split(b'\r\n\r\n')[1]) == dict(payload, policy=POLITICA_PILOTO, modo="busca")
+    assert b"GET /v1/guicredito/policy " in post.enviados
+    assert json.loads(post.enviados.rsplit(b'\r\n\r\n', 1)[1]) == dict(payload, policy=POLITICA_PILOTO, modo="busca")
 
 
 def plugin():
@@ -87,3 +98,33 @@ def test_pedido_invalido_nao_chega_ao_modelo(alteracao):
     p = plugin()
     with pytest.raises(ValueError):
         p.executar(pedido("busca") | alteracao, lambda *_: pytest.fail("modelo"), lambda *_: pytest.fail("despacho"))
+
+
+@pytest.mark.parametrize("resposta", [http(status=404), http(b'{}'),
+    http(b'{"policy":"guicredito-parallel-anon-v1","model":"hermes-agent"}', headers=b"Connection: close\r\n")])
+def test_prova_expira_quando_gateway_perde_plugin(tmp_path, resposta):
+    from guicredito.pessoas.http import POLITICA_PILOTO
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    probe = SocketDoTurno(http(json.dumps({"policy": POLITICA_PILOTO, "model": "hermes-agent"}).encode()))
+    turno = SocketDoTurno(resposta)
+    sockets = iter((probe, turno))
+    tx = TransporteLocal(config(tmp_path), conectar=lambda *_: next(sockets),
+                         ritmo=SimpleNamespace(requisicao=nullcontext))
+    tx.exigir_politica()
+    payload = {"model": "hermes-agent", "store": False, "input": "NOME FICTICIO", "instructions": "buscar"}
+    with pytest.raises(PoliticaIndisponivel):
+        tx.enviar_restrito("http://127.0.0.1:8642/v1/responses", payload,
+                           modo="busca", argumentos={"query": payload["input"], "limit": 3})
+    assert b"POST " not in turno.enviados and b"NOME FICTICIO" not in turno.enviados
+
+
+def test_ensaio_chama_leitura_com_texto_ficticio_se_pagina_mudou():
+    from integracoes.hermes import testar
+    from types import SimpleNamespace
+    enviados = []
+    testar.testar_leitura(SimpleNamespace(propor=lambda texto, ref: enviados.append((texto, ref)) or []),
+                          SimpleNamespace(baixar=lambda *_: SimpleNamespace(
+                              estado="consultado", texto="Conteúdo diferente", url="https://example.org/")))
+    assert len(enviados) == 1 and "Example Domain" in enviados[0][0]
+    assert enviados[0][1]["url"] == "https://example.invalid/fonte-ficticia"
