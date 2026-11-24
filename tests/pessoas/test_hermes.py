@@ -184,13 +184,18 @@ def test_recorte_preserva_nome_e_reserva():
         recortar(texto, "JOÃO EXEMPLO", 35, "x" * 100)
 
 
-def test_gateway_instalado_bloqueia_antes_do_envio(tmp_path, monkeypatch):
+def test_gateway_sem_plugin_bloqueia_antes_do_envio(tmp_path, monkeypatch):
     cliente, _ = criar_servicos_web(config(tmp_path))
-    monkeypatch.setattr(cliente.transporte, "_conectar", lambda *_: pytest.fail("conexão"))
+    probes = []
+    def sem_plugin(url, payload=None):
+        probes.append((url, payload))
+        raise ErroGateway("HTTP 404")
+    monkeypatch.setattr(cliente.transporte, "_requisicao", sem_plugin)
     for acao in [cliente.exigir_politica, lambda: cliente.buscar(CONSULTA),
                  lambda: cliente.propor("João Exemplo", ALVO)]:
         with pytest.raises(PoliticaIndisponivel, match="gratuita"):
             acao()
+    assert probes == [("http://127.0.0.1:8642/v1/guicredito/policy", None)] * 3
 
 
 def test_recorte_envia_somente_janelas_relevantes_quando_contexto_e_amplo():

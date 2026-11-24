@@ -312,8 +312,7 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
     if cliente is None:
         consulta.update(estado="nao_configurado", motivo="busca não configurada")
         return saida
-    # O transporte padrão atualmente recusa essa política: o fluxo só avança
-    # com um cliente capaz de garantir as restrições exigidas pelo Hermes.
+    # O gateway precisa anunciar a política da rota dedicada antes de receber a consulta.
     cliente.exigir_politica()
     busca = cliente.buscar(pedido)
     consulta.update(estado="consultado" if busca.itens else "sem_resultados", motivo="",

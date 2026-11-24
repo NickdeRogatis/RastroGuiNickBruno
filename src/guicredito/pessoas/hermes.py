@@ -23,10 +23,9 @@ antes de incorporar propostas como candidatos e evidências para revisão.
 
 Antes de enviar /responses, o transporte precisa garantir a política de uma
 busca gratuita com argumentos exatos e de leitura sem ferramentas. Os prompts
-expressam essas regras, mas não substituem esse controle prévio. Atualmente,
-TransporteLocal recusa essa garantia e lança PoliticaIndisponivel: buscar e
-propor ficam bloqueados com o transporte padrão. Consultar /models por meio de
-verificar continua sendo um diagnóstico separado e não libera as pesquisas.
+expressam as regras que a rota exclusiva do plugin aplica no gateway. O
+transporte exige que o plugin anuncie o contrato antes de enviar o conteúdo.
+Consultar /models por meio de verificar testa apenas a autenticação e o modelo.
 
 Os pedidos usam store=False e não são repetidos automaticamente. Uma falha de
 envio pode ocorrer após o gateway ter recebido o pedido; cabe ao fluxo externo
@@ -302,7 +301,7 @@ class ClienteHermes:
 
     # Exige busca Hermes configurada sem diagnósticos e um transporte capaz de
     # declarar a política e executar pedidos restritos. A garantia é delegada ao
-    # transporte; o TransporteLocal atual sempre a recusa antes de enviar pesquisas.
+    # transporte, que verifica a rota dedicada antes de enviar pesquisas.
     def exigir_politica(self):
         if self.config.busca != "hermes" or self.config.diagnosticos:
             raise ErroGateway("Busca ausente ou configuração inválida")

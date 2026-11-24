@@ -4,9 +4,8 @@ Valida URLs e endereços IP antes do envio e conecta diretamente ao IP aprovado,
 com verificação TLS em HTTPS. Cada requisição tem uma única tentativa, sem seguir
 redirecionamentos, com limites de tempo e tamanho e intervalo entre operações.
 
-TransporteLocal permite apenas consultar /v1/models com autenticação no gateway
-de loopback. Buscas e envios com payload ficam bloqueados enquanto não houver
-garantia da política exigida para ferramentas, argumentos e custo do Hermes.
+TransporteLocal autentica no gateway de loopback. Todo envio nominal usa
+exclusivamente a rota do plugin que impõe os limites das ferramentas.
 
 TransportePublico baixa páginas de endereços públicos sem credenciais, extrai
 texto e detecta indícios de login ou captcha. Para as redes sociais reconhecidas,
@@ -37,6 +36,8 @@ class ErroGateway(RuntimeError):
 class PoliticaIndisponivel(ErroGateway):
     pass
 
+
+POLITICA_PILOTO = "guicredito-parallel-anon-v1"
 
 MOTIVO_POLITICA = (
     "Hermes sem política prévia demonstrada para uma única web_search gratuita "
@@ -117,7 +118,7 @@ class _FalhaHTTP(Exception):
 
 
 # Executa um GET no IP validado, verifica TLS e rejeita redirecionamentos e respostas fora dos limites.
-def _obter(destino, conectar, timeout, max_bytes, headers):
+def _obter(destino, conectar, timeout, max_bytes, headers, corpo_pedido=None):
     partes, porta, ip = destino
     host = partes.hostname.encode("idna").decode("ascii")
     # HTTPConnection não recebe a URL nem credenciais de proxy. Fixar o socket
@@ -134,7 +135,7 @@ def _obter(destino, conectar, timeout, max_bytes, headers):
         alvo = partes.path or "/"
         if partes.query:
             alvo += "?" + partes.query
-        conexao.request("GET", alvo, headers=headers)
+        conexao.request("GET" if corpo_pedido is None else "POST", alvo, body=corpo_pedido, headers=headers)
         resposta = conexao.getresponse()
         if 300 <= resposta.status < 400:
             raise _FalhaHTTP("redirecionamento")
@@ -164,28 +165,53 @@ class TransporteLocal:
         self._conectar = conectar
         self._ritmo = ritmo or Ritmo(config.intervalo)
 
-    # Bloqueia o uso do Hermes porque o transporte não oferece a garantia de política exigida.
+        self._politica_ok = False
+
     def exigir_politica(self):
-        # /v1/responses herda as ferramentas da plataforma. O servidor instalado
-        # não oferece contrato por pedido vinculando argumentos, contagem e custo.
-        raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        if self._politica_ok:
+            return
+        try:
+            base = validar_gateway_url(self._config.hermes_url, self._resolver)
+            contrato = self._requisicao(base + "/guicredito/policy")
+        except (ErroGateway, ValueError):
+            raise PoliticaIndisponivel(MOTIVO_POLITICA) from None
+        if contrato != {"policy": POLITICA_PILOTO, "model": self._config.hermes_modelo}:
+            raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        self._politica_ok = True
 
-    # Recusa envios restritos enquanto a política de ferramentas, argumentos e custo não é garantida.
     def enviar_restrito(self, url, payload, *, modo, argumentos):
-        raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        base = validar_gateway_url(self._config.hermes_url, self._resolver)
+        if (url != base + "/responses" or modo not in ("busca", "leitura")
+                or not isinstance(payload, dict) or payload.get("store") is not False
+                or payload.get("model") != self._config.hermes_modelo):
+            raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        esperado = {"query": payload.get("input"), "limit": 3} if modo == "busca" else {}
+        if argumentos != esperado:
+            raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        self.exigir_politica()
+        return self._requisicao(base + "/guicredito/responses", dict(payload, modo=modo, policy=POLITICA_PILOTO))
 
-    # Consulta apenas /models com a chave do gateway local e valida a resposta como objeto JSON.
     def enviar(self, url, payload=None) -> dict:
         if payload is not None:
             raise PoliticaIndisponivel(MOTIVO_POLITICA)
+        if url != validar_gateway_url(self._config.hermes_url, self._resolver) + "/models":
+            raise ErroGateway("Requisição autenticada inválida")
+        return self._requisicao(url)
+
+    def _requisicao(self, url, payload=None) -> dict:
         try:
             base = validar_gateway_url(self._config.hermes_url, self._resolver)
-            if url != base + "/models" or not self._config.hermes_key:
+            permitidas = (base + "/models", base + "/guicredito/policy") if payload is None else (base + "/guicredito/responses",)
+            if url not in permitidas or not self._config.hermes_key:
                 raise ErroGateway("Requisição autenticada inválida")
             destino = _destino(url, self._resolver, True)
             headers = {"Authorization": "Bearer " + self._config.hermes_key, "Accept": "application/json"}
+            dados = None
+            if payload is not None:
+                headers["Content-Type"] = "application/json"
+                dados = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
             with self._ritmo.requisicao():
-                corpo, _ = _obter(destino, self._conectar, self._config.hermes_timeout, 5_000_000, headers)
+                corpo, _ = _obter(destino, self._conectar, self._config.hermes_timeout, 5_000_000, headers, dados)
             resposta = json.loads(corpo)
             if isinstance(resposta, dict):
                 return resposta
