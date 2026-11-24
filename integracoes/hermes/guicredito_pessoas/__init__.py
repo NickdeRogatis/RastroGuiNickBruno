@@ -61,14 +61,17 @@ def executar(pedido, chamar_modelo, buscar):
         if (call["type"] != "function" or fn["name"] != "web_search"
                 or not re.fullmatch(r"[\w.-]{1,128}", call["id"], re.ASCII)):
             raise ValueError("Ferramenta ou ID inválido")
-        args = json.loads(fn["arguments"], object_pairs_hook=objeto_unico)
-        if (args != {"query": pedido["input"], "limit": 3} or type(args["limit"]) is not int):
-            raise ValueError("Argumentos divergentes")
+        if not isinstance(json.loads(fn["arguments"], object_pairs_hook=objeto_unico), dict):
+            raise ValueError("Argumentos inválidos")
+        # O Qwen local às vezes reescreve a consulta (tira aspas ou termos), e o llama.cpp
+        # ignora tool_choice em forma de objeto. O texto do modelo não é usado: a busca e
+        # a resposta levam sempre a consulta autorizada pelo cliente.
+        autorizados = json.dumps({"query": pedido["input"], "limit": 3}, ensure_ascii=False)
         # O único ponto de despacho. Usa o pedido autorizado, após conferir a decisão do modelo.
         itens = buscar(pedido["input"])
         resultado = {"success": True, "data": {"web": itens, "served_by": "parallel"}}
         comum = {"status": "completed", "call_id": call["id"]}
-        saida = [dict(comum, type="function_call", name="web_search", arguments=fn["arguments"]),
+        saida = [dict(comum, type="function_call", name="web_search", arguments=autorizados),
                  dict(comum, type="function_call_output", output=json.dumps(resultado, ensure_ascii=False))]
     return {"id": "resp_" + uuid.uuid4().hex, "status": "completed", "output": saida}
 

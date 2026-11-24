@@ -1,7 +1,8 @@
 # What this file is for: it is the "main" of the project.
 # `python -m guicredito.djen` lands here. It downloads the TJSP gazettes for
 # the chosen days, keeps the collection cases, marks settlements in other
-# cases, drops company-only, bank and under-one-year cases, scores the rest,
+# cases, drops company-only, bank, already-settled and under-one-year cases,
+# scores the rest,
 # and writes the Excel sheet. Every other file is one step called from here.
 """Run the whole command, from dates to the printed summary.
 
@@ -16,8 +17,9 @@ to find settlements. ``leitura.ler_caderno`` yields every publication.
 ``partes`` keeps only collection classes. ``casos.resumir`` and
 ``casos.montar_casos`` fold those publications into one case per process
 number, and ``casos.marcar_acordos`` adds points for a settlement in the
-debtor's other cases. Company-only debtors, bank creditors and cases
-under one year old are dropped. ``pontuacao`` scores what remains and
+debtor's other cases. Company-only debtors, bank creditors, cases with
+a settlement in force (``Caso.acordo_vigente``) and cases under one year
+old are dropped. ``pontuacao`` scores what remains and
 keeps the top ``limite`` (300). The zip is read a second time, only for
 those winning case numbers, so the Publicações sheet can hold their full
 text. ``planilha.escrever_planilha`` writes ``saida/casos_djen_....xlsx``.
@@ -100,6 +102,8 @@ def rodar(
     restantes = [caso for caso in casos if not caso.so_empresa]
     banco = [caso for caso in restantes if caso.tipo_credor is TipoCredor.BANCO]
     restantes = [caso for caso in restantes if caso.tipo_credor is not TipoCredor.BANCO]
+    com_acordo = [caso for caso in restantes if caso.acordo_vigente]
+    restantes = [caso for caso in restantes if not caso.acordo_vigente]
     recentes = [caso for caso in restantes if recente(caso, momento.year)]
     restantes = [caso for caso in restantes if not recente(caso, momento.year)]
     pontuados = [CasoPontuado(caso, pontuar(caso)) for caso in restantes]
@@ -119,6 +123,7 @@ def rodar(
         processos_so_empresa=len(so_empresa),
         processos_banco=len(banco),
         processos_recentes=len(recentes),
+        processos_acordo=len(com_acordo),
         dias_historico=len(cadernos_historico),
         casos_na_planilha=len(escolhidos),
         gerado_em=momento,
@@ -158,6 +163,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=0,
         help="dias úteis antes de --inicio lidos só para achar acordos",
     )
+    parser.add_argument(
+        "--mais-de-600-mil",
+        action="store_true",
+        help="pesquisa avulsa de processos com valor da causa acima de R$ 600.000,00 (use com --help para opções)",
+    )
     args = parser.parse_args(argv)
     if (args.inicio is None) != (args.fim is None):
         parser.error("informe --inicio e --fim juntos, ou nenhum dos dois")
@@ -172,7 +182,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(sys.argv[1:] if argv is None else argv)
+    raw_argv = sys.argv[1:] if argv is None else list(argv)
+    if "--mais-de-600-mil" in raw_argv:
+        from guicredito.dg_mais_de_600_mil.cli import main as main_filtro
+
+        return main_filtro(raw_argv)
+    args = parse_args(raw_argv)
     caminho, resumo = rodar(
         args.inicio,
         args.fim,
@@ -191,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         f"(só empresa, fora da planilha: {resumo.processos_so_empresa})"
     )
     print(f"Fora por credor banco: {resumo.processos_banco}")
+    print(f"Fora por acordo homologado no próprio processo: {resumo.processos_acordo}")
     print(f"Fora por ter menos de 1 ano: {resumo.processos_recentes}")
     print(f"Casos na planilha: {resumo.casos_na_planilha}")
     print(f"Planilha: {caminho}")

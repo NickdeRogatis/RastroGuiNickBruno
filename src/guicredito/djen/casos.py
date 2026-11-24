@@ -12,10 +12,17 @@ the highest-precedence name (fund, then bank, then company, then person).
 those before ``pontuacao`` sees them. ``comarca`` shortens the court name
 for the Comarca column that ``planilha`` writes.
 
-``marcar_acordos`` runs after ``montar_casos``. A debtor with an approved
-settlement (``acordo_homologado``) in one process earns 30 points on each
-of their *other* processes. Names match after ``normalizar`` and only
-with three words or more, so short homonyms do not match.
+``acordo_vigente`` is true when the newest settlement news in the case is
+``acordo_homologado`` and no later (or same-day) publication says
+``acordo_descumprido``. ``pipeline`` drops those cases: the creditor is
+being paid and has no reason to sell. A ``penhora_levantada`` erases the
+seizure signals of that publication and of every older one.
+
+``marcar_acordos`` runs after ``montar_casos``. A debtor with a settlement
+still in force in one process earns 30 points on each of their *other*
+processes that have no settlement of their own. Names match after
+``normalizar`` and only with three words or more, so short homonyms do
+not match.
 """
 
 import re
@@ -32,7 +39,7 @@ from guicredito.djen.modelos import (
     TipoCredor,
 )
 from guicredito.djen.partes import eh_empresa, partes_do_cabecalho, tipo_credor
-from guicredito.djen.sinais import detectar_sinais
+from guicredito.djen.sinais import PENHORAS_LEVANTAVEIS, detectar_sinais
 from guicredito.djen.texto import ano_cnj, formatar_cnj, normalizar
 
 _COMARCA = re.compile(r"comarca de\s+(.+)", re.IGNORECASE)
@@ -131,12 +138,31 @@ def _credor(nomes: list[str]) -> tuple[str | None, TipoCredor | None]:
     return None, None
 
 
+def _em_ordem(itens: list[ResumoPublicacao]) -> list[ResumoPublicacao]:
+    return [item for _, item in sorted(enumerate(itens), key=lambda par: (par[1].data, par[0]))]
+
+
 def _sinais(itens: list[ResumoPublicacao]) -> tuple[Sinal, ...]:
     por_chave: dict[str, Sinal] = {}
-    for _, item in sorted(enumerate(itens), key=lambda par: (par[1].data, par[0])):
+    for item in _em_ordem(itens):
+        chaves = {sinal.chave for sinal in item.sinais}
+        if "penhora_levantada" in chaves:
+            for chave in PENHORAS_LEVANTAVEIS:
+                por_chave.pop(chave, None)
         for sinal in item.sinais:
             por_chave[sinal.chave] = sinal
     return tuple(por_chave.values())
+
+
+def _acordo_vigente(itens: list[ResumoPublicacao]) -> bool:
+    vigente = False
+    for item in _em_ordem(itens):
+        chaves = {sinal.chave for sinal in item.sinais}
+        if "acordo_descumprido" in chaves:
+            vigente = False
+        elif "acordo_homologado" in chaves:
+            vigente = True
+    return vigente
 
 
 def _ano_divida(numero: str, itens: list[ResumoPublicacao]) -> int:
@@ -188,6 +214,7 @@ def montar_casos(resumos: Iterable[ResumoPublicacao]) -> list[Caso]:
                 ultima_data=atual.data,
                 ultimo_tipo=atual.tipo,
                 n_publicacoes=len(itens),
+                acordo_vigente=_acordo_vigente(itens),
             )
         )
     return casos
@@ -203,12 +230,15 @@ def _nomes_para_cruzar(caso: Caso) -> list[str]:
 def marcar_acordos(casos: list[Caso], referencia: Iterable[Caso]) -> list[Caso]:
     acordos: dict[str, set[str]] = {}
     for caso in referencia:
-        if not any(sinal.chave == "acordo_homologado" for sinal in caso.sinais):
+        if not caso.acordo_vigente:
             continue
         for nome in _nomes_para_cruzar(caso):
             acordos.setdefault(nome, set()).add(caso.numero_processo)
     marcados: list[Caso] = []
     for caso in casos:
+        if caso.acordo_vigente:
+            marcados.append(caso)
+            continue
         outros = {
             numero
             for nome in _nomes_para_cruzar(caso)

@@ -73,8 +73,9 @@ _EXPLICACAO = (
     "Frase do sinal positivo de maior pontuação, entre aspas.",
 )
 _PONTOS = (
-    "Acordo em outro processo (máx. 30): o mesmo devedor tem acordo homologado em outro processo lido na rodada 30. Só nomes com 3 palavras ou mais.",
-    "Imóvel (máx. 25): leilão negativo 20; imóvel penhorado, matrícula ou avaliação 15; bem de família 8; penhora 6.",
+    "Acordo homologado no próprio processo: o caso fica fora da planilha, salvo se uma publicação posterior noticiar o descumprimento.",
+    "Acordo em outro processo (máx. 30): o mesmo devedor tem acordo homologado, e não descumprido, em outro processo lido na rodada 30. Só nomes com 3 palavras ou mais.",
+    "Imóvel (máx. 25): leilão negativo 20; imóvel penhorado, matrícula ou avaliação 15; bem de família 8; penhora 6. Penhora levantada por decisão apaga a penhora daquela publicação e das anteriores.",
     "Trânsito em julgado (máx. 15): texto cita trânsito em julgado 15; cumprimento de sentença sem essa frase 10.",
     "Desgaste (máx. 15): bloqueio ou pesquisa com resultado negativo 10; acordo frustrado 10; arquivamento provisório 8.",
     "Veículo (máx. 3): Renajud ou veículo 3.",
@@ -245,6 +246,7 @@ def _aba_como_ler(ws: Worksheet, resumo: ResumoRodada) -> None:
     _escrever(ws, ["Processos", resumo.processos])
     _escrever(ws, ["Fora por serem só empresa", resumo.processos_so_empresa])
     _escrever(ws, ["Fora por credor banco", resumo.processos_banco])
+    _escrever(ws, ["Fora por acordo homologado no próprio processo", resumo.processos_acordo])
     _escrever(ws, ["Fora por ter menos de 1 ano", resumo.processos_recentes])
     _escrever(ws, ["Dias de histórico lidos", resumo.dias_historico])
     _escrever(ws, ["Na planilha", resumo.casos_na_planilha])

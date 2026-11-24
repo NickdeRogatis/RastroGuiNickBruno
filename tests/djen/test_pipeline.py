@@ -244,3 +244,28 @@ def test_historico_sem_caderno_segue(tmp_path, item, fazer_zip):
     assert caminho.is_file()
     assert resumo.dias_historico == 0
     assert resumo.dias_sem_caderno == []
+
+
+def test_processo_com_acordo_homologado_fica_fora(tmp_path, item, fazer_zip):
+    devedor = {"nome": "JOSÉ CARLOS DA SILVA", "polo": "P"}
+    credor = {"nome": "EMPRESA EXEMPLO LTDA", "polo": "A"}
+    acordo = item(
+        id=1,
+        numero_processo=PROC_A,
+        texto="<p>Homologo o acordo. Fica levantada a penhora sobre o imóvel.</p>",
+        destinatarios=[credor, devedor],
+    )
+    descumprido = item(
+        id=2,
+        numero_processo=PROC_B,
+        texto="<p>Diante da notícia de descumprimento do acordo homologado, defiro a penhora.</p>",
+        destinatarios=[credor, {"nome": "MARIA EXEMPLO FICTÍCIA", "polo": "P"}],
+    )
+    cliente = _cliente(tmp_path, fazer_zip, {date(2026, 11, 6): [acordo, descumprido]})
+    caminho, resumo = _rodar(tmp_path, cliente, date(2026, 11, 6), date(2026, 11, 6))
+    assert resumo.processos_acordo == 1
+    linhas = _linhas_casos(caminho)
+    assert "1000001-18.2022.8.26.0001" not in linhas
+    assert "acordo descumprido" in linhas["1000002-18.2022.8.26.0002"]["Sinais de desgaste"]
+    como_ler = {row[0]: row[1] for row in load_workbook(caminho)["Como ler"].iter_rows(values_only=True)}
+    assert como_ler["Fora por acordo homologado no próprio processo"] == 1

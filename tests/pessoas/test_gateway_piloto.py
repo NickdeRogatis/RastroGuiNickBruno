@@ -58,12 +58,27 @@ def escolha(calls, finish="tool_calls", content=""):
 
 
 @pytest.mark.parametrize("calls", [[], [chamada(), chamada()], [chamada("web_extract")],
-    [chamada(args='{"query":"outro","limit":3}')], [chamada(args='{"query":"Caso fictício","limit":4}')],
-    [chamada(args='{"query":"outro","query":"Caso fictício","limit":3}')]])
+    [chamada(args='{"query":"outro","query":"Caso fictício","limit":3}')], [chamada(args='["Caso fictício"]')]])
 def test_veta_antes_do_backend(calls):
     p = plugin()
     with pytest.raises(ValueError):
         p.executar(pedido("busca"), lambda *_: escolha(calls), lambda *_: pytest.fail("despacho"))
+
+
+# O Qwen local às vezes tira aspas ou termos da consulta. A busca e a resposta usam
+# sempre a consulta autorizada; o texto reescrito pelo modelo nunca sai do gateway.
+@pytest.mark.parametrize("args", ['{"query":"outro","limit":3}', '{"query":"Caso fictício","limit":4}',
+                                  '{"query":"Caso"}'])
+def test_consulta_reescrita_pelo_modelo_e_ignorada(args):
+    p = plugin()
+    despachos = []
+    def buscar(query):
+        despachos.append(query)
+        return []
+    resp = p.executar(pedido("busca"), lambda *_: escolha([chamada(args=args)]), buscar)
+    call, _ = resp["output"]
+    assert despachos == ["Caso fictício"]
+    assert json.loads(call["arguments"]) == {"query": "Caso fictício", "limit": 3}
 
 
 def test_busca_realmente_despachada_uma_vez_e_raiz_da_evidencia():

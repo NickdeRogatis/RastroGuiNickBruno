@@ -61,6 +61,57 @@ Para abrir a planilha do piloto, use `open "$planilha"`. Só gere uma planilha q
 
 Os cadernos ficam em `dados/cadernos/`. A saída é `saida/casos_djen_AAAA-MM-DD_a_AAAA-MM-DD.xlsx`. Para usar outra planilha nas próximas etapas, ajuste a variável `planilha`.
 
+### Pesquisa acima de R$ 600 mil (`--mais-de-600-mil`)
+
+Este modo usa o mesmo comando do DJEN sobre **todo o universo elegível antes do corte de 300** e exporta somente processos cujo **valor da causa seja estritamente maior que R$ 600.000,00** (a partir de R$ 600.000,01). Toda escrita fica isolada em `saida/DG__mais_de_600_mil/`, preservando a planilha normal, `dados/cadernos/`, `saida/aprofundamento/` e `saida/pessoas/`.
+
+**Período automático.** Usa o mesmo período padrão do diário.
+
+~~~zsh
+"$py" -m guicredito.djen --mais-de-600-mil
+~~~
+
+**Período escolhido.** Informe `--inicio` e `--fim` juntos.
+
+~~~zsh
+"$py" -m guicredito.djen --mais-de-600-mil \
+  --inicio 2026-11-12 --fim 2026-11-23
+~~~
+
+**Testar usando apenas cadernos e capas locais (sem novas consultas ao e-SAJ).** Reaproveita somente o que já está salvo em `dados/cadernos/`, `saida/aprofundamento/` e `saida/DG__mais_de_600_mil/capas/`.
+
+~~~zsh
+"$py" -m guicredito.djen --mais-de-600-mil \
+  --inicio 2026-11-12 --fim 2026-11-23 \
+  --somente-capas-locais
+~~~
+
+**Funil pelo texto do DJEN + consulta só nos candidatos (`--so-mencao-diario`).** Em vez de consultar milhares de processos sem pista de valor, restringe as consultas avulsas no e-SAJ aos processos cujo texto no diário já cita valores acima de R$ 600 mil e acrescenta a aba **Candidatos (diário)** na planilha. A confirmação continua exigindo **valor da causa > R$ 600.000,00** na capa do e-SAJ.
+
+~~~zsh
+"$py" -m guicredito.djen --mais-de-600-mil \
+  --so-mencao-diario --max-consultas 30 --intervalo 5
+~~~
+
+**Opções adicionais (`--historico`, `--limite`, `--max-consultas`, `--intervalo`, `--sem-cache`).** Sem `--limite`, exporta todos os confirmados acima de R$ 600.000,00. `--max-consultas` (padrão `10`) controla quantas novas consultas avulsas são enviadas ao e-SAJ por execução, com intervalo mínimo de `3` segundos (`--intervalo`, padrão `5`). A primeira execução salva um cache dos cadernos da rodada em `saida/DG__mais_de_600_mil/rodadas/`, deixando as retomadas quase instantâneas (use `--sem-cache` se quiser forçar releitura dos `.zip`).
+
+~~~zsh
+"$py" -m guicredito.djen --mais-de-600-mil \
+  --inicio 2026-11-12 --fim 2026-11-23 \
+  --so-mencao-diario --historico 5 --limite 50 --max-consultas 30 --intervalo 5
+~~~
+
+**Retomar a mesma rodada.** Repita o mesmo comando com as mesmas datas. O cache evita reler os `.zip`, e capas já verificadas em `saida/aprofundamento/` ou `saida/DG__mais_de_600_mil/capas/` são reutilizadas automaticamente, sem repetir consultas concluídas nem duplicar linhas. A planilha traz as abas **Casos**, **Publicações**, **Candidatos (diário)** (quando `--so-mencao-diario` é usado), **Pendentes** e **Como ler** (com indicação de **cobertura parcial** enquanto houver pendências).
+
+**Abrir a planilha filtrada ou a pasta no Mac.**
+
+~~~zsh
+open saida/DG__mais_de_600_mil/casos_djen_2026-11-17_a_2026-11-23.xlsx
+open saida/DG__mais_de_600_mil
+~~~
+
+Detalhes completos de estrutura, retomada e fontes verificadas estão em [src/guicredito/dg_mais_de_600_mil/README.md](src/guicredito/dg_mais_de_600_mil/README.md).
+
 ## 2. Aprofundar um ou até dez processos no TJSP
 
 **Lote já coletado.** Abra o relatório dos dez casos da rodada. Para retomar uma consulta interrompida, use o segundo comando com a mesma seleção e pasta. A consulta reaproveita resultados compatíveis que já estejam coletados ou parcialmente coletados.
@@ -253,6 +304,7 @@ A confirmação seguinte **exclui os dados gerados dos casos marcados neste lote
 
 ~~~zsh
 "$py" -m guicredito.djen --help
+"$py" -m guicredito.djen --mais-de-600-mil --help
 "$py" -m guicredito.aprofundamento --help
 "$py" -m guicredito.pessoas --help
 "$py" -m guicredito.pessoas pesquisar --help
@@ -264,6 +316,7 @@ Para consultar as opções de qualquer outro subcomando, acrescente `--help` dep
 |---|---|
 | Projeto principal completo | `"$py" -m pytest -q` |
 | Classificação DJEN | `"$py" -m pytest -q tests/djen` |
+| Pesquisa DJEN acima de R$ 600 mil | `"$py" -m pytest -q tests/dg_mais_de_600_mil` |
 | Aprofundamento TJSP | `"$py" -m pytest -q tests/aprofundamento` |
 | Pesquisa de pessoas | `"$py" -m pytest -q tests/pessoas` |
 | Fluxo de pessoas com casos fictícios e serviços simulados | `"$py" -m pytest -q tests/pessoas/test_integracao.py` |

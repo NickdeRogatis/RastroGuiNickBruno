@@ -17,3 +17,5 @@ __pycache__/
 
 # configurações e credenciais locais
 .env
+.venv
+.venv.nosync/

@@ -208,3 +208,66 @@ def test_devedor_none_nao_quebra():
     a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
     sem = caso_de(PROC_OUTRO, None)
     assert marcar_acordos([sem], [a, sem]) == [sem]
+
+
+DESCUMPRIDO = Sinal("acordo_descumprido", Bloco.DESGASTE, 0, "acordo descumprido", "Descumprido o acordo.")
+LEVANTADA = Sinal("penhora_levantada", Bloco.ALERTA, 0, "⚠ penhora levantada", "Fica levantada a penhora.")
+PENHORA = Sinal("penhora", Bloco.IMOVEL, 6, "penhora", "Defiro a penhora.")
+IMOVEL = Sinal("imovel_penhorado", Bloco.IMOVEL, 15, "imóvel penhorado/avaliado", "Penhora do imóvel.")
+
+
+def _caso(*pubs: tuple[date, tuple[Sinal, ...]]):
+    (caso,) = montar_casos([resumo(data=dia, sinais=sinais) for dia, sinais in pubs])
+    return caso
+
+
+def test_acordo_homologado_deixa_acordo_vigente():
+    assert _caso((date(2026, 11, 6), (ACORDO,))).acordo_vigente
+
+
+def test_sem_acordo_nao_e_vigente():
+    assert not _caso((date(2026, 11, 6), (PENHORA,))).acordo_vigente
+
+
+def test_publicacao_posterior_neutra_mantem_acordo_vigente():
+    caso = _caso((date(2026, 11, 6), (ACORDO,)), (date(2026, 11, 9), ()))
+    assert caso.acordo_vigente
+
+
+def test_descumprimento_posterior_encerra_acordo():
+    caso = _caso((date(2026, 11, 9), (DESCUMPRIDO,)), (date(2026, 11, 6), (ACORDO,)))
+    assert not caso.acordo_vigente
+
+
+def test_descumprimento_na_mesma_publicacao_vence():
+    assert not _caso((date(2026, 11, 6), (ACORDO, DESCUMPRIDO))).acordo_vigente
+
+
+def test_novo_acordo_depois_do_descumprimento_e_vigente():
+    caso = _caso((date(2026, 11, 6), (DESCUMPRIDO,)), (date(2026, 11, 9), (ACORDO,)))
+    assert caso.acordo_vigente
+
+
+def test_penhora_levantada_apaga_penhoras_anteriores():
+    caso = _caso((date(2026, 11, 6), (PENHORA, IMOVEL)), (date(2026, 11, 9), (LEVANTADA,)))
+    assert [s.chave for s in caso.sinais] == ["penhora_levantada"]
+
+
+def test_penhora_nova_depois_do_levantamento_conta():
+    caso = _caso((date(2026, 11, 6), (LEVANTADA,)), (date(2026, 11, 9), (PENHORA,)))
+    assert {s.chave for s in caso.sinais} == {"penhora_levantada", "penhora"}
+
+
+def test_acordo_descumprido_em_a_nao_pontua_b():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO, DESCUMPRIDO)
+    b = caso_de(PROC_OUTRO, "JOSÉ CARLOS DA SILVA")
+    (marcado_b,) = marcar_acordos([b], [a, b])
+    assert _acordos(marcado_b) == []
+
+
+def test_caso_com_acordo_proprio_nao_ganha_acordo_em_outro():
+    a = caso_de(PROC_ACORDO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    b = caso_de(PROC_OUTRO, "JOSÉ CARLOS DA SILVA", ACORDO)
+    marcado_a, marcado_b = marcar_acordos([a, b], [a, b])
+    assert _acordos(marcado_a) == []
+    assert _acordos(marcado_b) == []

@@ -9,8 +9,14 @@ hit per key, kept as a ``Sinal`` from ``modelos``.
 
 The block on each signal (settlement, real estate, final judgment, wear,
 vehicle, discount, alert) is what ``pontuacao`` later sums, up to that
-block's cap. ``acordo_homologado`` is worth 0 here: ``casos.marcar_acordos``
-turns it into points on the debtor's *other* cases. The label and
+block's cap. ``acordo_homologado`` is worth 0 here: ``casos.montar_casos``
+uses it to mark a case as settled (``pipeline`` drops it), and
+``casos.marcar_acordos`` turns it into points on the debtor's *other*
+cases. ``acordo_descumprido`` undoes that settlement; the warnings that
+only say what happens *if* the deal breaks do not match it.
+``penhora_levantada`` (an order lifting the seizure, not a request for
+it) removes the ``penhora`` and ``imovel_penhorado`` hits of its own
+publication, and ``casos`` removes the older ones. The label and
 the quoted sentence are what ``planilha`` prints in the signal columns.
 """
 
@@ -63,6 +69,20 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
         re.compile(r"arquiv\w*.{0,15}provisori\w*"),
     ),
     (
+        "acordo_descumprido",
+        Bloco.DESGASTE,
+        0,
+        "acordo descumprido",
+        re.compile(
+            r"(?:noticia|informacao|noticiad\w*|alegad\w*|reconhecendo|em virtude|em razao|por)"
+            r"(?: de| do| d[ae] que houve| o)? (?:o )?(?:descumprimento|inadimplemento)"
+            r" d[oe]s? (?:termos do )?acordo"
+            r"|descumprid[oa] o acordo|acordo (?:judicial )?homologado e descumprido"
+            r"|(?:nao cumpriu|descumpriu|deixou de cumprir) o acordo"
+            r"|reiterado inadimplemento do acordo"
+        ),
+    ),
+    (
         "acordo_homologado",
         Bloco.ACORDO,
         0,
@@ -80,6 +100,25 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
         re.compile(
             r"transitou em julgado|(?:acordao|sentenca|decisao) transitad[oa] em julgado"
             r"|certifico(?: que)? o transito em julgado|ocorreu o transito em julgado"
+        ),
+    ),
+    (
+        "penhora_levantada",
+        Bloco.ALERTA,
+        0,
+        "⚠ penhora levantada",
+        # A lift that names a vehicle, rent, wages and so on says nothing
+        # about real estate, so the sentence must not name one of those.
+        re.compile(
+            r"^(?!.*\b(?:veiculo|motocicleta|renajud|automovel|alugue\w*|salario|faturamento"
+            r"|rosto dos autos|cotas sociais|sisbajud)\b).*?(?:"
+            r"(?:fica|ficam|dou por|deve ser|devem ser|seja|sejam)"
+            r" (?:levantad|desconstituid|cancelad|liberad)\w* (?:a|as) penhoras?\b"
+            r"|(?<![a-z])(?:determino|defiro|autorizo|providencie|proceda-se|efetivacao)\b.{0,30}?"
+            r"(?:levantamento|desconstituicao|cancelamento|baixa|liberacao) d[ao]s? penhoras?\b"
+            r"|(?<![a-z])(?:desconstituo|levanto|cancelo) (?:a|as) penhoras?\b"
+            r"|penhoras?\b.{0,40}?(?:ora|ja foi|foi|foram) (?:levantad|desconstituid|cancelad|liberad)"
+            r")"
         ),
     ),
     (
@@ -190,6 +229,10 @@ CATALOGO: list[tuple[str, Bloco, int, str, re.Pattern[str]]] = [
 ]
 
 
+# Signals a "penhora levantada" cancels, in its own publication and in older ones.
+PENHORAS_LEVANTAVEIS = frozenset({"imovel_penhorado", "penhora"})
+
+
 def eh_texto_padrao(frase_normalizada: str) -> bool:
     return any(padrao.search(frase_normalizada) for padrao in PADROES)
 
@@ -213,4 +256,6 @@ def detectar_sinais(texto: str) -> tuple[Sinal, ...]:
                 continue
             vistos.add(chave)
             achados.append(Sinal(chave, bloco, pontos, rotulo, frase[:300]))
+    if "penhora_levantada" in vistos:
+        achados = [sinal for sinal in achados if sinal.chave not in PENHORAS_LEVANTAVEIS]
     return tuple(achados)

@@ -341,3 +341,83 @@ def test_texto_padrao_nao_apaga_penhora_na_mesma_frase():
 def test_silencio_sem_artigo_485_ainda_e_arquivamento():
     texto = "No silêncio, remetam-se os autos ao arquivo provisório."
     assert any(s.chave == "arquivamento_provisorio" for s in detectar_sinais(texto))
+
+
+FRASE_LEVANTADA = (
+    "Fica levantada a penhora sobre o imóvel objeto da matrícula nº 11.728 (AV10), "
+    "servindo a presente decisão como mandado."
+)
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        FRASE_LEVANTADA,
+        "Em razão da composição, dou por levantadas as penhoras realizadas nestes autos.",
+        "Providencie a serventia o levantamento da penhora que recai sobre o imóvel.",
+        "Em consequência: a) desconstituo a penhora incidente sobre o referido imóvel.",
+        "Defiro o levantamento da penhora incidente sobre o imóvel objeto da matrícula nº 9.",
+        "Pela mesma razão, deve ser levantada a penhora incidente sobre o imóvel.",
+    ],
+)
+def test_penhora_levantada_nao_conta_imovel(frase):
+    chaves = {s.chave for s in detectar_sinais(frase)}
+    assert "penhora_levantada" in chaves
+    assert "imovel_penhorado" not in chaves
+    assert "penhora" not in chaves
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        "O executado requereu o levantamento da penhora sobre o imóvel.",
+        "Rejeito o pedido de desconstituição da penhora do imóvel.",
+        "Quitado o débito, o processo será extinto e eventuais penhoras efetivadas serão levantadas.",
+        "Ante o exposto, INDEFIRO o pedido de desconstituição da penhora e mantenho a decisão.",
+        "Determino o levantamento da penhora e a baixa das restrições via RENAJUD sobre o veículo.",
+    ],
+)
+def test_pedido_ou_promessa_de_levantar_nao_e_penhora_levantada(frase):
+    assert "penhora_levantada" not in {s.chave for s in detectar_sinais(frase)}
+
+
+def test_penhora_levantada_apaga_penhora_de_outra_frase_da_mesma_publicacao():
+    texto = "Homologo o acordo. " + FRASE_LEVANTADA + " Oficie-se ao registro da penhora."
+    chaves = {s.chave for s in detectar_sinais(texto)}
+    assert {"penhora", "imovel_penhorado"}.isdisjoint(chaves)
+
+
+def test_penhora_levantada_e_alerta():
+    (sinal,) = [s for s in detectar_sinais(FRASE_LEVANTADA) if s.chave == "penhora_levantada"]
+    assert (sinal.bloco, sinal.pontos, sinal.rotulo) == (Bloco.ALERTA, 0, "⚠ penhora levantada")
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        "Diante da notícia de descumprimento do acordo homologado, defiro a penhora on-line.",
+        "Diante da informação de que houve descumprimento do acordo celebrado entre as partes, intime-se.",
+        "Tendo a parte exequente noticiado o descumprimento do acordo homologado no evento 15, intime-se.",
+        "Diante da informação de que a executada não cumpriu o acordo, indefiro o pedido.",
+        "Descumprido o acordo homologado às fls. 89, prossiga-se.",
+    ],
+)
+def test_acordo_descumprido(frase):
+    sinais = {s.chave: s for s in detectar_sinais(frase)}
+    assert "acordo_descumprido" in sinais
+    sinal = sinais["acordo_descumprido"]
+    assert (sinal.bloco, sinal.pontos, sinal.rotulo) == (Bloco.DESGASTE, 0, "acordo descumprido")
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        "Em caso de descumprimento do acordo, caberá à parte exequente noticiar nos autos.",
+        "Eventual descumprimento do acordo deverá ser comunicado nos autos.",
+        "Caberá ao credor comunicar o descumprimento do acordo, para o que não será intimado.",
+        "Decorrido o prazo fixado ou com a denúncia do descumprimento do acordo, tornem conclusos.",
+        "Caso não seja comunicado o descumprimento até 05 dias após o decurso do prazo do acordo, arquive-se.",
+    ],
+)
+def test_aviso_sobre_descumprimento_futuro_nao_conta(frase):
+    assert "acordo_descumprido" not in {s.chave for s in detectar_sinais(frase)}

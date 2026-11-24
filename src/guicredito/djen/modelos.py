@@ -119,6 +119,9 @@ class Caso:
     ultima_data: date
     ultimo_tipo: str
     n_publicacoes: int
+    # True when the newest settlement news in the case is an approved deal,
+    # with no later "acordo descumprido". ``pipeline`` drops these cases.
+    acordo_vigente: bool = False
 
 
 @dataclass(frozen=True)
@@ -154,3 +157,4 @@ class ResumoRodada:
     dias_historico: int
     casos_na_planilha: int
     gerado_em: datetime
+    processos_acordo: int = 0
