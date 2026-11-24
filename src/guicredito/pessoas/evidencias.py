@@ -1,4 +1,38 @@
-"""Pesquisa de um alvo, com evidências restritas à fonte efetivamente consultada."""
+"""Transforma resultados de busca e propostas do Hermes em evidências para revisão.
+
+Este módulo coordena a pesquisa web de um único alvo e aplica as regras de
+aceitação dos achados. hermes.py prepara os pedidos ao modelo e valida o formato
+das respostas; http.py baixa as páginas e valida os destinos da conexão. Aqui,
+uma proposta só segue para o lote quando atende às verificações da fonte, do
+nome, da categoria e do conteúdo permitido para o papel da pessoa.
+
+O fluxo principal, pesquisar_web, funciona assim:
+1. Valida o alvo e monta uma consulta com seu nome e o objetivo correspondente
+   a devedor, credor ou advogado. Devedores PJ ficam fora desta pesquisa web.
+2. Exige a política do cliente Hermes, executa a busca e registra os IDs da
+   resposta e da chamada. Agrupa os resultados por URL para baixar cada página
+   uma única vez nesta pesquisa, conservando as referências de busca recebidas.
+3. Filtra URLs e baixa as permitidas. Se uma página não puder ser consultada,
+   tenta preservar uma referência de identidade do snippet ou apenas o link,
+   sempre como não verificado e sem tentar contornar login ou captcha.
+4. Em páginas consultadas que contêm o nome, oculta padrões de CPF e, para
+   devedores, também emails e telefones antes de pedir propostas ao Hermes.
+5. Confere cada proposta contra a fonte e aplica os filtros de conteúdo.
+   Cria candidatos, evidências e, quando permitido, contatos profissionais.
+
+A saída contém quatro listas: candidatos, evidencias, consultas e contatos.
+Uma evidência de página consultada não confirma a identidade da pessoa: os
+candidatos continuam com verificacao='nao_verificado'. A confiança é uma
+heurística baseada em indícios compatíveis com referências do alvo e conflitos;
+não representa uma probabilidade nem substitui a revisão humana.
+
+A comparação textual usa normalização e limites de palavra, portanto não exige
+igualdade byte a byte com a fonte. O SHA-256 identifica o trecho preservado e
+permite conferir sua integridade ao gravar; não autentica a página de origem.
+salvar_recorte grava apenas esse trecho, enquanto fluxo.py publica os demais
+arquivos do lote. Se a leitura pelo Hermes falhar após a busca, uma exceção
+carrega os resultados parciais para o chamador preservá-los sem reenvio automático.
+"""
 import hashlib
 import ipaddress
 import re
@@ -12,6 +46,8 @@ from .hermes import CATEGORIAS, INDICIOS
 from .http import ErroGateway, rede_social
 
 
+# Padrões textuais usados na ocultação, filtragem e extração. Reconhecem formatos,
+# mas não validam a titularidade dos contatos nem os dígitos verificadores do CPF.
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,64}")
 _TELEFONE = re.compile(r"(?<!\d)(?:\+55\s*)?\(?[1-9]\d\)?[\s.-]*(?:9\d{4}|[2-5]\d{3})[\s.-]?\d{4}(?!\d)")
 _CPF = re.compile(r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)")
@@ -21,23 +57,34 @@ _OBJETIVOS = {"devedor": "profissional processo", "credor": "contato profissiona
 
 
 class ErroPesquisaParcial(ErroGateway):
+    # Transporta a saída acumulada quando a proposta de leitura falha depois da
+    # busca, permitindo ao fluxo externo salvar o progresso antes de interromper.
     def __init__(self, parcial):
         super().__init__("Leitura interrompida após busca concluída")
         self.parcial = parcial
 
 
+# Retorna a data e hora atuais em UTC no formato ISO para registrar consultas
+# e evidências quando não há uma data fornecida pela página.
 def _agora():
     return datetime.now(UTC).isoformat()
 
 
+# Calcula o SHA-256 dos bytes UTF-8 do trecho para identificá-lo e conferir
+# sua integridade no arquivo; o hash não comprova a veracidade do conteúdo.
 def _sha(texto):
     return hashlib.sha256(texto.encode()).hexdigest()
 
 
+# Procura um trecho não vazio após normalizar os dois textos, exigindo limites
+# de palavra para evitar correspondências dentro de palavras maiores.
 def _contem(texto, parte):
     return bool(parte.strip() and re.search(r"(?<!\w)" + re.escape(normalizar(parte)) + r"(?!\w)", normalizar(texto)))
 
 
+# Valida papel, tipo e formato do nome e monta a consulta com o nome entre aspas
+# e um objetivo fixo por papel. Retorna None para alvos fora do escopo ou nomes
+# inválidos; outros campos do alvo não são incluídos no texto enviado à busca.
 def _consulta(alvo):
     nome, papel, tipo = alvo["nome"], alvo["papel"], alvo["tipo"]
     if papel not in _OBJETIVOS or tipo not in ("PF", "PJ") or (papel == "devedor" and tipo == "PJ"):
@@ -51,6 +98,10 @@ def _consulta(alvo):
     return f'"{nome}" {_OBJETIVOS[papel]}'
 
 
+# Filtra URLs HTTP(S), recusando credenciais, fragmentos, caracteres proibidos,
+# nomes locais conhecidos e IPs literais inadequados. Em redes sociais, restringe
+# caminhos a formatos de perfil/empresa. Não resolve DNS: a verificação dos IPs
+# efetivamente usados na conexão pertence ao transporte HTTP.
 def _url_permitida(url):
     try:
         p = urlsplit(url)
@@ -79,6 +130,9 @@ def _url_permitida(url):
         return False
 
 
+# Classifica como baixa se houver conflito. Sem conflito, usa o menor número
+# entre campos distintos e valores normalizados distintos: zero dá baixa,
+# um dá média e dois ou mais dão alta. Os indícios recebidos devem ser compatíveis.
 def confianca(indicios, conflitos):
     if conflitos:
         return "baixa"
@@ -87,6 +141,11 @@ def confianca(indicios, conflitos):
     return ("baixa", "média", "alta")[min(len(campos), len(valores), 2)]
 
 
+# Exige que a URL pertença aos resultados fornecidos e tenha um registro de página,
+# além de categoria permitida e trecho com até 500 caracteres após aparar espaços.
+# Confere o trecho na página consultada ou, se indisponível, no snippet da busca.
+# Retorna a evidência com origem, estado e hash, ou None; os filtros por alvo
+# e papel são aplicados depois por _permitido, dentro de _adicionar.
 def validar_achado(achado, resultados, paginas):
     url = achado.get("url")
     fonte = next((r for r in resultados if r.url == url), None)
@@ -106,6 +165,9 @@ def validar_achado(achado, resultados, paginas):
                 tipo="pagina" if de_pagina else "snippet", data=pagina.data or _agora(), sha256=_sha(trecho))
 
 
+# Confere texto e hash e grava evidencia-<sha256>.txt sem sobrescrever conteúdo
+# divergente. Rejeita links simbólicos e reutiliza um arquivo existente somente
+# quando os bytes coincidem; devolve uma cópia da evidência com o nome do arquivo.
 def salvar_recorte(pasta: Path, evidencia: dict, texto: str):
     if texto != evidencia["trecho"] or _sha(texto) != evidencia["sha256"]:
         raise ValueError("Recorte divergente da evidência")
@@ -122,6 +184,9 @@ def salvar_recorte(pasta: Path, evidencia: dict, texto: str):
     return dict(evidencia, arquivo=arquivo)
 
 
+# Produz pares (tipo, valor) para emails e telefones encontrados no trecho.
+# Rotula como WhatsApp quando há esse marcador imediatamente antes do número;
+# o caráter profissional depende da categoria e dos filtros aplicados pelo chamador.
 def _contatos_profissionais(trecho):
     for match in _EMAIL.finditer(trecho):
         yield "email", match[0]
@@ -131,6 +196,10 @@ def _contatos_profissionais(trecho):
         yield tipo, match[0]
 
 
+# Exige nome correspondente ao alvo e presente no trecho. Recusa padrões de CPF
+# em qualquer papel e contatos de devedores; para emprego e processo, recusa
+# marcadores de negação/incerteza e exige sinais textuais da categoria.
+# São filtros heurísticos de conteúdo, não uma confirmação de identidade ou vínculo.
 def _permitido(alvo, proposta):
     if normalizar(proposta.get("nome", "")) != normalizar(alvo["nome"]):
         return False
@@ -155,12 +224,18 @@ def _permitido(alvo, proposta):
     return True
 
 
+# Aplica os filtros por alvo e rede social a uma evidência previamente validada,
+# conserva indícios sustentados pelo trecho e compara-os às referências do alvo.
+# Cria candidato e evidência vinculados por IDs, evitando candidatos duplicados;
+# só extrai contatos quando a evidência é de página e a categoria é profissional.
 def _adicionar(saida, alvo, proposta, ev):
     if not _permitido(alvo, proposta):
         return
     if rede_social(urlsplit(ev["url"]).hostname):
         if ev["categoria"] not in {"identidade", "emprego"} or _MIDIA.search(normalizar(ev["trecho"])):
             return
+    # Um indício precisa aparecer no trecho e caber em 100 caracteres. Valores
+    # sem referência no alvo são preservados, mas não aumentam a confiança.
     campos = {k: v.strip() for k, v in proposta["indicios"].items()
               if k in INDICIOS and isinstance(v, str) and 0 < len(v.strip()) <= 100 and _contem(ev["trecho"], v)}
     compativeis, conflitos = [], []
@@ -171,11 +246,15 @@ def _adicionar(saida, alvo, proposta, ev):
                 compativeis.append({"campo": campo, "valor": valor})
             else:
                 conflitos.append(campo)
+    # A identidade do candidato depende de alvo, URL, trecho normalizado e
+    # categoria; a da evidência inclui também o tipo de fonte e o hash do trecho.
     cid = identificador(alvo["id"], ev["url"], normalizar(ev["trecho"]), ev["categoria"])
     if any(c["id"] == cid for c in saida["candidatos"]):
         return
     eid = identificador(cid, ev["tipo"], ev["sha256"])
     ev.update(id=eid, candidato_id=cid, alvo_id=alvo["id"], arquivo="evidencia-" + ev["sha256"] + ".txt")
+    # Mesmo uma fonte consultada e uma confiança alta deixam a identidade
+    # pendente de revisão: nenhum candidato é confirmado automaticamente aqui.
     candidato = dict(id=cid, alvo_id=alvo["id"], nome=alvo["nome"], processo=alvo["processo"],
                      papel=alvo["papel"], tipo=alvo["tipo"], fonte="web_search", chave=ev["url"],
                      verificacao="nao_verificado", confianca=confianca(compativeis, conflitos),
@@ -189,6 +268,9 @@ def _adicionar(saida, alvo, proposta, ev):
                                           data_consulta=ev["data"], evidencia_id=eid))
 
 
+# Trata páginas não consultadas usando apenas o resultado já disponível da busca.
+# Tenta preservar um trecho curto de identidade como snippet não verificado;
+# sem trecho aceitável, registra só o link, sem criar candidato nem contato.
 def _preservar_barreira(saida, alvo, item, pagina):
     # Preservar somente a frase do snippet relativa ao alvo. Em perfis sociais
     # que mencionem publicações/conexões, conservar apenas o próprio nome.
@@ -215,6 +297,10 @@ def _preservar_barreira(saida, alvo, item, pagina):
                                     trecho="", sha256=_sha(""), tipo="link", estado="nao_verificado"))
 
 
+# Coordena busca, download e leitura para um alvo e retorna as quatro listas
+# do resultado. Registra consultas mesmo quando não há achados, filtra as fontes
+# antes do download e valida propostas antes de incorporá-las. Falhas na chamada
+# de leitura geram ErroPesquisaParcial com o progresso, sem repetir o pedido.
 def pesquisar_web(alvo: dict, cliente, http) -> dict:
     saida = {"candidatos": [], "evidencias": [], "consultas": [], "contatos": []}
     consulta = dict(id=identificador(alvo["id"], "web_search"), alvo_id=alvo["id"], fonte="web_search",
@@ -226,11 +312,15 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
     if cliente is None:
         consulta.update(estado="nao_configurado", motivo="busca não configurada")
         return saida
+    # O transporte padrão atualmente recusa essa política: o fluxo só avança
+    # com um cliente capaz de garantir as restrições exigidas pelo Hermes.
     cliente.exigir_politica()
     busca = cliente.buscar(pedido)
     consulta.update(estado="consultado" if busca.itens else "sem_resultados", motivo="",
                     id_resposta=busca.id_resposta, id_chamada=busca.id_chamada, backend=busca.backend,
                     ferramenta="web_search", limite=busca.limite, paginacao="uma página", quantidade=len(busca.itens))
+    # A mesma URL pode aparecer com snippets diferentes. Baixa-se uma vez,
+    # mas conservam-se essas referências para o tratamento de páginas indisponíveis.
     por_url = {}
     for item in busca.itens:
         por_url.setdefault(item.url, []).append(item)
@@ -248,6 +338,8 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
             continue
         if not _contem(pagina.texto, alvo["nome"]):
             continue
+        # O modelo recebe uma referência mínima e texto com padrões sensíveis
+        # ocultados. A página original permanece disponível para validar os trechos.
         referencia = {"nome": alvo["nome"], "papel": alvo["papel"], "url": url}
         texto = _CPF.sub("[identificador omitido]", pagina.texto)
         if alvo["papel"] == "devedor":
@@ -255,6 +347,9 @@ def pesquisar_web(alvo: dict, cliente, http) -> dict:
         try:
             propostas = cliente.propor(texto, referencia)
         except Exception:
+            # A busca e leituras anteriores podem ter produzido dados úteis.
+            # Preserva-os na exceção e registra a leitura interrompida sem expor
+            # a mensagem original do erro ou reenviar um pedido possivelmente executado.
             saida["consultas"].append(dict(id=identificador(alvo["id"], "leitura", url), alvo_id=alvo["id"],
                                            fonte="leitura Hermes", url=url, estado="interrompido",
                                            motivo="leitura incompleta; sem reenvio", data=_agora(), versao=1))

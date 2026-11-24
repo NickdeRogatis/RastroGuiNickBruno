@@ -1,4 +1,18 @@
-"""HTTP de uma tentativa, com conexão ao IP validado e autenticação só no gateway."""
+"""Controla o acesso HTTP ao gateway Hermes local e às fontes públicas de pessoas.
+
+Valida URLs e endereços IP antes do envio e conecta diretamente ao IP aprovado,
+com verificação TLS em HTTPS. Cada requisição tem uma única tentativa, sem seguir
+redirecionamentos, com limites de tempo e tamanho e intervalo entre operações.
+
+TransporteLocal permite apenas consultar /v1/models com autenticação no gateway
+de loopback. Buscas e envios com payload ficam bloqueados enquanto não houver
+garantia da política exigida para ferramentas, argumentos e custo do Hermes.
+
+TransportePublico baixa páginas de endereços públicos sem credenciais, extrai
+texto e detecta indícios de login ou captcha. Para as redes sociais reconhecidas,
+preserva apenas títulos. Retorna uma Pagina com texto ou motivo da falha e mantém
+os resultados em cache por URL durante a vida da instância.
+"""
 import http.client
 import ipaddress
 import json
@@ -30,10 +44,12 @@ MOTIVO_POLITICA = (
 )
 
 
+# Resolve o nome do host para os endereços IP disponíveis para conexões TCP.
 def _resolver(host):
     return tuple(item[4][0] for item in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM))
 
 
+# Valida URL, porta e todos os IPs conforme o acesso local ou público e seleciona o IP da conexão.
 def _destino(url, resolver, local):
     if not isinstance(url, str) or re.search(r"[\s\\\x00-\x1f\x7f]", url) or "#" in url:
         raise ValueError("URL inválida")
@@ -60,6 +76,7 @@ def _destino(url, resolver, local):
     return partes, porta, ips[0]
 
 
+# Valida a base /v1 do gateway em loopback e retorna a URL sem barras finais.
 def validar_gateway_url(url: str, resolver=_resolver) -> str:
     try:
         partes, _, _ = _destino(url, resolver, True)
@@ -71,6 +88,7 @@ def validar_gateway_url(url: str, resolver=_resolver) -> str:
 
 
 class Ritmo:
+    # Configura o intervalo mínimo e os recursos usados para serializar e espaçar requisições.
     def __init__(self, intervalo=5, relogio=time.monotonic, dormir=time.sleep):
         if intervalo < 3:
             raise ValueError("Intervalo inferior a 3 segundos")
@@ -80,6 +98,7 @@ class Ritmo:
         self._ultimo = None
         self._lock = threading.Lock()
 
+    # Serializa as requisições e aguarda o intervalo configurado desde o término da anterior.
     @contextmanager
     def requisicao(self):
         with self._lock:
@@ -97,6 +116,7 @@ class _FalhaHTTP(Exception):
     pass
 
 
+# Executa um GET no IP validado, verifica TLS e rejeita redirecionamentos e respostas fora dos limites.
 def _obter(destino, conectar, timeout, max_bytes, headers):
     partes, porta, ip = destino
     host = partes.hostname.encode("idna").decode("ascii")
@@ -137,20 +157,24 @@ def _obter(destino, conectar, timeout, max_bytes, headers):
 
 
 class TransporteLocal:
+    # Prepara a configuração, a resolução de nomes, a conexão e o ritmo de acesso ao gateway.
     def __init__(self, config, *, resolver=_resolver, conectar=socket.create_connection, ritmo=None):
         self._config = config
         self._resolver = resolver
         self._conectar = conectar
         self._ritmo = ritmo or Ritmo(config.intervalo)
 
+    # Bloqueia o uso do Hermes porque o transporte não oferece a garantia de política exigida.
     def exigir_politica(self):
         # /v1/responses herda as ferramentas da plataforma. O servidor instalado
         # não oferece contrato por pedido vinculando argumentos, contagem e custo.
         raise PoliticaIndisponivel(MOTIVO_POLITICA)
 
+    # Recusa envios restritos enquanto a política de ferramentas, argumentos e custo não é garantida.
     def enviar_restrito(self, url, payload, *, modo, argumentos):
         raise PoliticaIndisponivel(MOTIVO_POLITICA)
 
+    # Consulta apenas /models com a chave do gateway local e valida a resposta como objeto JSON.
     def enviar(self, url, payload=None) -> dict:
         if payload is not None:
             raise PoliticaIndisponivel(MOTIVO_POLITICA)
@@ -181,6 +205,7 @@ class Pagina:
     data: str = ""
 
 
+# Identifica domínios e subdomínios de Instagram, Facebook e LinkedIn para limitar o texto coletado.
 def rede_social(host):
     host = (host or "").lower().rstrip(".")
     for rede in ("instagram.com", "facebook.com", "linkedin.com"):
@@ -190,6 +215,7 @@ def rede_social(host):
 
 
 class _TextoHTML(HTMLParser):
+    # Inicializa os acumuladores de texto e títulos e os indicadores de conteúdo ignorado e barreiras.
     def __init__(self):
         super().__init__()
         self.partes = []
@@ -198,6 +224,7 @@ class _TextoHTML(HTMLParser):
         self.ignorar = 0
         self.barreira = False
 
+    # Marca blocos a ignorar, coleta títulos Open Graph e detecta campos de senha ou indícios de captcha.
     def handle_starttag(self, tag, attrs):
         if tag in ("style", "script", "noscript", "svg", "head"):
             self.ignorar += 1
@@ -211,12 +238,14 @@ class _TextoHTML(HTMLParser):
         if any("captcha" in (atributos.get(k) or "").lower() for k in ("class", "id", "src")):
             self.barreira = True
 
+    # Encerra a captura do título ou a exclusão de texto ao fechar as respectivas tags.
     def handle_endtag(self, tag):
         if tag == "title":
             self.em_titulo = False
         if tag in ("style", "script", "noscript", "svg", "head") and self.ignorar:
             self.ignorar -= 1
 
+    # Acumula o texto dos títulos e dos trechos que não pertencem aos blocos ignorados.
     def handle_data(self, data):
         if self.em_titulo:
             self.titulos.append(data)
@@ -225,6 +254,7 @@ class _TextoHTML(HTMLParser):
 
 
 class TransportePublico:
+    # Configura o acesso público, os limites de download, o relógio e o cache de páginas por URL.
     def __init__(self, *, resolver=_resolver, conectar=socket.create_connection, ritmo=None,
                  max_bytes=5_000_000, timeout=25, agora=lambda: datetime.now(UTC)):
         self._resolver = resolver
@@ -235,6 +265,7 @@ class TransportePublico:
         self._agora = agora
         self._cache = {}
 
+    # Obtém ou reutiliza uma página, extrai o texto permitido e registra em cache o resultado ou a falha.
     def baixar(self, url) -> Pagina:
         if url in self._cache:
             return self._cache[url]

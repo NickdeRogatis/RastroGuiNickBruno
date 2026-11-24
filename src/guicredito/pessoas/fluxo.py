@@ -17,14 +17,17 @@ from .relatorio import projetar_revisao, renderizar, renderizar_revisao
 SEPARADOS = ("consultas", "contatos", "evidencias")
 
 
+# Retorna a data e hora atuais em UTC no formato ISO para registrar operações.
 def _agora():
     return datetime.now(timezone.utc).isoformat()
 
 
+# Gera uma assinatura SHA-256 do objeto serializado em JSON com chaves ordenadas.
 def _hash(obj):
     return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+# Reconstitui os casos e suas seções a partir do manifesto e dos arquivos do lote.
 def _carregar(lote):
     m = lote.manifesto()
     if not m:
@@ -40,6 +43,7 @@ def _carregar(lote):
     return {**{k: m[k] for k in ("lote", "origem", "suprimidas")}, "casos": casos}
 
 
+# Atualiza as decisões dos candidatos e publica os dados, a planilha e os relatórios do lote.
 def _salvar(lote, dados, decisoes):
     for caso in dados["casos"]:
         for candidato in caso["candidatos"]:
@@ -50,6 +54,7 @@ def _salvar(lote, dados, decisoes):
                 if any(anterior.get(k) != v for k, v in atual.items()):
                     candidato["decisao"] = {**atual, "lida_em": _agora()}
 
+    # Monta os arquivos do lote, incluindo recortes de evidências e páginas de revisão.
     def montar(base):
         m = {k: dados[k] for k in ("lote", "origem", "suprimidas")}
         m.update(formato=FORMATO, numeros=[c["processo"] for c in dados["casos"]])
@@ -72,6 +77,7 @@ def _salvar(lote, dados, decisoes):
     lote.publicar(montar)
 
 
+# Cria um lote a partir de uma cópia da entrada, inicializando seções e rótulos aleatórios.
 def _novo(entrada, origem):
     casos = copy.deepcopy(entrada.casos)
     aliases = list(range(1, len(casos) + 1))
@@ -83,6 +89,7 @@ def _novo(entrada, origem):
     return {"lote": secrets.token_hex(8), "origem": origem, "casos": casos, "suprimidas": []}
 
 
+# Acrescenta registros ao destino sem duplicar identificadores já presentes.
 def _unir(destino, itens):
     ids = {r["id"] for r in destino}
     for r in itens:
@@ -91,6 +98,7 @@ def _unir(destino, itens):
             ids.add(r["id"])
 
 
+# Consulta OAB ou CNPJ conforme o alvo e incorpora candidatos, evidências e o estado da consulta.
 def _registros(caso, alvo, indice, oab):
     if alvo["papel"] == "advogado":
         from .oab import CaptchaOAB, consulta_oab
@@ -150,6 +158,7 @@ def _registros(caso, alvo, indice, oab):
     consulta.update(estado="consultado" if rows else "sem_resultados", data=_agora(), motivo="")
 
 
+# Obtém ou cria o registro que acompanha a consulta de um alvo em uma fonte.
 def _consulta(caso, alvo, fonte):
     chave = _hash([alvo["id"], fonte])
     for item in caso["consultas"]:
@@ -161,6 +170,7 @@ def _consulta(caso, alvo, fonte):
     return item
 
 
+# Executa a pesquisa Hermes para o alvo elegível, salvando o estado e preservando resultados parciais.
 def _web(caso, alvo, cliente, http, gravar):
     if alvo["tipo"] == "PJ" and alvo["papel"] == "devedor":
         return
@@ -174,6 +184,7 @@ def _web(caso, alvo, cliente, http, gravar):
         return
     consulta.update(estado="incerto", motivo="Pesquisa iniciada.", data=_agora())
     gravar()
+    # Mescla candidatos, evidências, contatos e consultas da resposta ao caso sem duplicar IDs.
     def incorporar(resposta):
         for k in ("candidatos", "evidencias", "contatos"):
             _unir(caso[k], resposta.get(k, []))
@@ -191,6 +202,7 @@ def _web(caso, alvo, cliente, http, gravar):
     gravar()
 
 
+# Cria ou retoma o lote, coordena as pesquisas dos casos ativos e salva resultados e conferências.
 def pesquisar(entrada, config, servicos, saida):
     from .cnpj import IndiceCNPJ
     from .oab import consulta_oab
@@ -241,6 +253,7 @@ def pesquisar(entrada, config, servicos, saida):
         return dados
 
 
+# Lê as decisões da planilha, valida CPFs e processa consultas de contatos quando há provedor.
 def contatos(pasta, provedor=None):
     with Lote(pasta) as lote:
         dados = _carregar(lote)
@@ -260,12 +273,14 @@ def contatos(pasta, provedor=None):
         return {"estado": "concluido", "casos": len(dados["casos"])}
 
 
+# Seleciona os casos marcados para descarte e gera um código vinculado à versão da planilha.
 def _previa(dados, decisoes, marca_excel):
     marcados = [c for c in dados["casos"] if decisoes["casos"][c["processo"]].get("Descartar") == "sim"]
     codigo = _hash([dados["lote"], marca_excel, [c["ordem"] for c in marcados]])[:24]
     return marcados, {"rotulos": [c["rotulo"] for c in marcados], "codigo": codigo}
 
 
+# Retorna os rótulos dos casos marcados para descarte e o código necessário para confirmá-lo.
 def prever_descarte(pasta):
     with Lote(pasta) as lote:
         dados = _carregar(lote)
@@ -273,6 +288,7 @@ def prever_descarte(pasta):
         return _previa(dados, d, lote.marca_excel)[1]
 
 
+# Valida o código da prévia e remove os casos marcados e os registros relacionados antes de salvar.
 def confirmar_descarte(pasta, codigo):
     with Lote(pasta) as lote:
         dados = _carregar(lote)
@@ -295,6 +311,7 @@ def confirmar_descarte(pasta, codigo):
         return len(marcados)
 
 
+# Incorpora conferências manuais completas da OAB aos candidatos e às evidências dos casos ativos.
 def _incorporar_conferencias(dados, decisoes):
     from .oab import importar_manual
     for caso in dados["casos"]:
@@ -322,6 +339,7 @@ def _incorporar_conferencias(dados, decisoes):
                 anterior.update(registro)
 
 
+# Valida conferências OAB em JSON, associa-as aos alvos do lote e salva as decisões e os registros.
 def importar_oab(pasta, arquivo):
     """Conferência em JSON equivale à edição das três colunas OAB no Excel."""
     from .oab import importar_manual
@@ -351,6 +369,7 @@ def importar_oab(pasta, arquivo):
         return len(vistos)
 
 
+# Resolve uma requisição de contatos incerta com o resultado conferido e salva o lote sem nova consulta.
 def conciliar_contatos(pasta, requisicao, resultado, arquivo=None):
     """Incorpora a conferência de Nick no pedido incerto sem chamar o provedor."""
     with Lote(pasta) as lote:
